@@ -68,16 +68,30 @@ Change these in Settings once that screen lands (Phase 3+).
       cashier, voided log, stock movements) with multi-sheet Excel export; MoMo &
       split tender; sale voids (manager-override, restores stock, audited); users &
       PINs management; and the audit-log viewer.
-- [ ] Phase 7 — Backups, recovery, performance, installer
+- [x] **Phase 7 — Hardening:** backups (manual `.ctbk` to USB + daily auto-snapshot
+      keeping the last 14) and restore; recovery phrase with PIN reset from the login
+      screen; the full keyboard-shortcut pass (F2/F4/F6/F9/Esc) with on-screen hints;
+      and FTS5 product search with a LIKE fallback. Installer + thermal USB write are
+      the remaining **on-Windows** steps below.
 
-## Note: thermal printing (Rust)
+All seven phases are feature-complete. What's left is inherently on-device.
 
-Receipt bytes (ESC/POS) and the HTML/OS-dialog fallback are complete and work
-today. The one piece that must be finished and verified **on the Windows machine
-with the actual printer** is the raw USB write inside `print_receipt`
-(`src-tauri/src/lib.rs`) — the standard Windows path is OpenPrinter →
-StartDocPrinter → WritePrinter → ClosePrinter. Until then, sales print through the
-OS print dialog with the HTML receipt, which is a first-class fallback per the PRD.
+## Finish on the Windows machine
+
+These need the Rust toolchain and/or real hardware, so they're built-with-notes
+here and verified there:
+
+1. **Build the installer:** install Rust (https://rustup.rs), then
+   `npm run tauri build` produces the `.msi` / `.exe` (targets already set in
+   `src-tauri/tauri.conf.json`). Generate icons once with `npm run tauri icon`.
+2. **Thermal USB write:** finish the raw write inside `print_receipt`
+   (`src-tauri/src/lib.rs`) — the standard Windows path is OpenPrinter →
+   StartDocPrinter → WritePrinter → ClosePrinter. Until then, sales print through
+   the OS dialog with the HTML receipt (a first-class fallback per the PRD).
+3. **Confirm the backup DB path:** `src/native/tauri.ts` reads/writes `pos.db` in
+   the app config dir — verify the SQL plugin resolves there on Windows.
+4. **FTS5:** the bundled SQLite includes FTS5, so `setupFts()` will succeed and
+   search uses the index automatically (the dev sql.js build falls back to LIKE).
 
 ## Methodology
 
