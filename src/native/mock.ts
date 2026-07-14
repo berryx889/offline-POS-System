@@ -13,6 +13,9 @@ import type { ExecuteResult, NativeAdapter } from "./types";
 
 const STORAGE_KEY = "countertop-dev-db";
 let database: Database | null = null;
+// sql.js `export()` ends any open transaction, so we must never persist mid-txn.
+// Track BEGIN/COMMIT/ROLLBACK to know when it's safe to snapshot to localStorage.
+let txnDepth = 0;
 
 async function db(): Promise<Database> {
   if (database) return database;
@@ -26,10 +29,20 @@ async function db(): Promise<Database> {
 }
 
 function persist(d: Database): void {
+  if (txnDepth > 0) return; // never export while a transaction is open
   const bytes = d.export();
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   localStorage.setItem(STORAGE_KEY, btoa(binary));
+}
+
+// Adjust the transaction counter based on the statement about to run.
+function trackTxn(sql: string): void {
+  const head = sql.trimStart().slice(0, 12).toUpperCase();
+  if (head.startsWith("BEGIN")) txnDepth++;
+  else if (head.startsWith("COMMIT") || head.startsWith("ROLLBACK")) {
+    txnDepth = Math.max(0, txnDepth - 1);
+  }
 }
 
 export const mockAdapter: NativeAdapter = {
@@ -53,6 +66,7 @@ export const mockAdapter: NativeAdapter = {
 
   async execute(sql, params = []): Promise<ExecuteResult> {
     const d = await db();
+    trackTxn(sql); // BEGIN bumps depth before persist; COMMIT/ROLLBACK clears it
     d.run(sql, params as never[]);
     const rowsAffected = d.getRowsModified();
     const res = d.exec("SELECT last_insert_rowid() AS id");

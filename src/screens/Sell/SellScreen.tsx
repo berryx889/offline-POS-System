@@ -1,17 +1,19 @@
 // The cashier's home (pos-prd.md §6.1).
 // Slice 1: manual search → cart with PC/BOX pricing and totals.
 // Slice 2: always-focused barcode scan capture, quick grid, scan feedback.
-// Cash tender + the sale transaction arrive in slice 3.
+// Slice 3: cash tender + the sale committed in one transaction, stock decrement.
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts, findByBarcode, type Product } from "@/db/queries/products";
 import { getSettings } from "@/db/queries/settings";
+import type { CommittedSale } from "@/db/queries/sales";
 import { useCart } from "@/store/cartStore";
 import { ReceiptTape } from "@/components/ReceiptTape";
 import { MoneyText } from "@/components/MoneyText";
 import { CartLineRow } from "./CartLineRow";
 import { QuickGrid } from "./QuickGrid";
+import { TenderPanel } from "./TenderPanel";
 import { beepSuccess, beepError } from "@/lib/sound";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
@@ -19,8 +21,11 @@ import { cn } from "@/lib/cn";
 export function SellScreen() {
   const [term, setTerm] = useState("");
   const [notFound, setNotFound] = useState<string | null>(null);
+  const [tenderOpen, setTenderOpen] = useState(false);
+  const [lastSale, setLastSale] = useState<CommittedSale | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const soundOn = settings?.sound_enabled !== "0";
@@ -37,14 +42,14 @@ export function SellScreen() {
   const total = subtotal; // discounts land in Phase 6
 
   const focusScan = () => scanRef.current?.focus();
+  const openTender = () => {
+    if (useCart.getState().lines.length > 0) setTenderOpen(true);
+  };
 
-  // The scan input stays focused so a scan is never lost to a stray click. We keep
-  // it out of the way of deliberate typing: clicks on any input/search area don't
-  // get yanked back (pos-prd.md §6.1 focus rule, made humane).
   useEffect(() => {
     focusScan();
     function onDocClick(e: MouseEvent) {
-      if (notFound) return;
+      if (notFound || tenderOpen) return;
       const t = e.target as HTMLElement;
       if (t.closest("input, textarea, select, [data-search]")) return;
       setTimeout(focusScan, 0);
@@ -53,6 +58,9 @@ export function SellScreen() {
       if (e.key === "F2") {
         e.preventDefault();
         searchRef.current?.focus();
+      } else if (e.key === "F4") {
+        e.preventDefault();
+        openTender();
       }
     }
     document.addEventListener("click", onDocClick);
@@ -61,7 +69,7 @@ export function SellScreen() {
       document.removeEventListener("click", onDocClick);
       window.removeEventListener("keydown", onKey);
     };
-  }, [notFound]);
+  }, [notFound, tenderOpen]);
 
   async function handleScan(code: string) {
     const trimmed = code.trim();
@@ -84,6 +92,17 @@ export function SellScreen() {
     focusScan();
   }
 
+  function onSaleDone(sale: CommittedSale) {
+    setTenderOpen(false);
+    setLastSale(sale);
+    // Stock changed — refresh reads that depend on it.
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["top-products"] });
+    queryClient.invalidateQueries({ queryKey: ["search"] });
+    setTimeout(() => setLastSale(null), 6000);
+    focusScan();
+  }
+
   return (
     <div className="grid h-full grid-cols-[1fr_380px]">
       {/* Hidden HID scan capture — types like a keyboard, ends with Enter (§8). */}
@@ -92,6 +111,7 @@ export function SellScreen() {
         aria-hidden
         className="pointer-events-none absolute h-0 w-0 opacity-0"
         onKeyDown={(e) => {
+          if (tenderOpen) return;
           if (e.key === "Enter") {
             const el = e.currentTarget;
             handleScan(el.value);
@@ -158,8 +178,20 @@ export function SellScreen() {
         </div>
       </section>
 
-      {/* Right: the receipt-tape cart */}
-      <aside className="flex flex-col bg-paper p-4">
+      {/* Right: the receipt-tape cart (relative so the tender panel overlays it) */}
+      <aside className="relative flex flex-col bg-paper p-4">
+        {lastSale && (
+          <div className="mb-2 rounded-xl border border-ledger/30 bg-ledger/5 px-4 py-3 text-sm">
+            <span className="font-semibold text-ledger">Sale {lastSale.receiptNo}</span> saved.
+            {lastSale.changePesewas > 0 && (
+              <>
+                {" "}
+                Change <MoneyText pesewas={lastSale.changePesewas} currency className="text-brass" />.
+              </>
+            )}
+          </div>
+        )}
+
         <div className="flex-1 overflow-hidden">
           <ReceiptTape
             businessName={settings?.business_name ?? "CounterTop POS"}
@@ -179,6 +211,7 @@ export function SellScreen() {
 
         <div className="mt-3 space-y-2">
           <button
+            onClick={openTender}
             disabled={lines.length === 0}
             className={cn(
               "flex h-14 w-full items-center justify-between rounded-xl bg-ledger px-5 text-tape shadow-card",
@@ -199,6 +232,17 @@ export function SellScreen() {
             </button>
           )}
         </div>
+
+        {tenderOpen && (
+          <TenderPanel
+            totalPesewas={total}
+            onCancel={() => {
+              setTenderOpen(false);
+              focusScan();
+            }}
+            onDone={onSaleDone}
+          />
+        )}
       </aside>
 
       {/* Unregistered barcode modal — shows the code verbatim (§9.7). */}
