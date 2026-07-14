@@ -8,6 +8,7 @@ import { getSettings } from "@/db/queries/settings";
 import { printSale } from "@/receipt/print";
 import { SaleReceiptView } from "@/components/SaleReceiptView";
 import { MoneyText } from "@/components/MoneyText";
+import { VoidDialog } from "./VoidDialog";
 import { cn } from "@/lib/cn";
 
 function shortDate(iso: string): string {
@@ -23,6 +24,7 @@ export function ReprintsScreen() {
   const [text, setText] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [reprinting, setReprinting] = useState(false);
+  const [voiding, setVoiding] = useState(false);
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const { data: sales = [] } = useQuery({
@@ -105,13 +107,23 @@ export function ReprintsScreen() {
             <div className="flex-1 overflow-hidden">
               <SaleReceiptView detail={detail} settings={settings} />
             </div>
-            <button
-              onClick={reprint}
-              disabled={reprinting}
-              className="mt-3 h-14 w-full rounded-xl bg-ledger text-lg font-semibold text-tape shadow-card transition-colors hover:bg-ledger-deep disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-carbon"
-            >
-              {reprinting ? "Printing…" : "Reprint receipt"}
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={reprint}
+                disabled={reprinting}
+                className="h-14 flex-1 rounded-xl bg-ledger text-lg font-semibold text-tape shadow-card transition-colors hover:bg-ledger-deep disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-carbon"
+              >
+                {reprinting ? "Printing…" : "Reprint"}
+              </button>
+              {detail.sale.status === "completed" && (
+                <button
+                  onClick={() => setVoiding(true)}
+                  className="h-14 rounded-xl border border-stamp px-5 text-sm font-semibold text-stamp hover:bg-stamp/5 focus:outline-none focus:ring-2 focus:ring-carbon"
+                >
+                  Void
+                </button>
+              )}
+            </div>
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-center text-sm text-ink/40">
@@ -119,6 +131,15 @@ export function ReprintsScreen() {
           </div>
         )}
       </aside>
+
+      {voiding && detail && (
+        <VoidDialog
+          saleId={detail.sale.id}
+          receiptNo={detail.sale.receipt_no}
+          onClose={() => setVoiding(false)}
+          onVoided={() => setVoiding(false)}
+        />
+      )}
     </div>
   );
 }

@@ -18,6 +18,22 @@ export async function listActiveUsers(): Promise<User[]> {
   );
 }
 
+/** Verify a PIN belongs to any active admin (manager-override for voids, price
+ *  overrides, discounts). Returns the admin User or null. */
+export async function verifyAdminPin(pin: string): Promise<User | null> {
+  const admins = await native.select<User & { pin_hash: string }>(
+    "SELECT id, name, role, active, pin_hash FROM users WHERE role = 'admin' AND active = 1"
+  );
+  for (const a of admins) {
+    if (await native.verifyPin(pin, a.pin_hash)) {
+      const { pin_hash: _omit, ...user } = a;
+      void _omit;
+      return user;
+    }
+  }
+  return null;
+}
+
 /** Verify a user's PIN. Returns the User on success, null otherwise. */
 export async function authenticate(userId: number, pin: string): Promise<User | null> {
   const rows = await native.select<User & { pin_hash: string }>(

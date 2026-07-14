@@ -132,6 +132,54 @@ export async function listSales(filter: SalesFilter = {}): Promise<SaleRow[]> {
   );
 }
 
+/** Void a completed sale (manager-override; pos-prd.md §2, §7). Restores stock in
+ *  one transaction: flips status, writes +stock movements, bumps stock back, and
+ *  audits it. voidedBy is the admin who authorized it. */
+export async function voidSale(
+  saleId: number,
+  voidedBy: number,
+  reason: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  await native.execute("BEGIN IMMEDIATE");
+  try {
+    const [sale] = await native.select<{ status: string; receipt_no: string }>(
+      "SELECT status, receipt_no FROM sales WHERE id = ?",
+      [saleId]
+    );
+    if (!sale) throw new Error("Sale not found");
+    if (sale.status !== "completed") throw new Error("Sale is already voided");
+
+    const items = await native.select<{ product_id: number; pieces_deducted: number }>(
+      "SELECT product_id, pieces_deducted FROM sale_items WHERE sale_id = ?",
+      [saleId]
+    );
+    for (const it of items) {
+      await native.execute(
+        "UPDATE products SET stock_pieces = stock_pieces + ?, updated_at = ? WHERE id = ?",
+        [it.pieces_deducted, now, it.product_id]
+      );
+      await native.execute(
+        `INSERT INTO stock_movements (product_id, change_pieces, reason, reference_id, user_id, created_at)
+         VALUES (?, ?, 'void', ?, ?, ?)`,
+        [it.product_id, it.pieces_deducted, saleId, voidedBy, now]
+      );
+    }
+    await native.execute(
+      "UPDATE sales SET status = 'voided', voided_by = ?, void_reason = ? WHERE id = ?",
+      [voidedBy, reason, saleId]
+    );
+    await native.execute(
+      "INSERT INTO audit_log (user_id, action, detail, created_at) VALUES (?, 'void', ?, ?)",
+      [voidedBy, JSON.stringify({ sale_id: saleId, receipt_no: sale.receipt_no, reason }), now]
+    );
+    await native.execute("COMMIT");
+  } catch (e) {
+    await native.execute("ROLLBACK");
+    throw e;
+  }
+}
+
 /** The most recent completed sale — for F9 "reprint last". */
 export async function getLastSale(): Promise<SaleDetail | null> {
   const [row] = await native.select<{ id: number }>(
