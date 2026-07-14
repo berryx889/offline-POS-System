@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listProductsManage, listCategories, type Product } from "@/db/queries/products";
 import { ProductDrawer } from "./ProductDrawer";
 import { RestockDialog } from "./RestockDialog";
+import { ImportDialog } from "./ImportDialog";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
@@ -19,6 +20,7 @@ export function ProductsScreen() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [restockTarget, setRestockTarget] = useState<Product | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
   const { data: products = [], isLoading } = useQuery({
@@ -36,12 +38,20 @@ export function ProductsScreen() {
     <div className="flex h-full flex-col p-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-sans text-xl font-semibold text-ink">Products</h1>
-        <button
-          onClick={() => setDrawer({ mode: "new" })}
-          className="h-11 rounded-xl bg-ledger px-5 font-semibold text-tape shadow-card hover:bg-ledger-deep focus:outline-none focus:ring-2 focus:ring-carbon"
-        >
-          + Add product
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setImporting(true)}
+            className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+          >
+            Import Excel
+          </button>
+          <button
+            onClick={() => setDrawer({ mode: "new" })}
+            className="h-11 rounded-xl bg-ledger px-5 font-semibold text-tape shadow-card hover:bg-ledger-deep focus:outline-none focus:ring-2 focus:ring-carbon"
+          >
+            + Add product
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -149,6 +159,7 @@ export function ProductsScreen() {
       {restockTarget && (
         <RestockDialog product={restockTarget} onClose={() => setRestockTarget(null)} />
       )}
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
     </div>
   );
 }
