@@ -56,7 +56,10 @@ Change these in Settings once that screen lands (Phase 3+).
       fallback, the Reprints screen (search + preview + reprint), F9 reprint-last,
       and Settings printer config with a test print. (Thermal USB write in Rust is
       stubbed — see note below; the HTML/OS-dialog path works cross-platform now.)
-- [ ] Phase 4 — Products CRUD, restock, Excel import
+- [x] **Phase 4 — Products:** full CRUD with add/edit drawer (independent
+      retail/wholesale, scan-to-fill barcode, inline categories), deactivate-vs-
+      delete, search/category/low-stock filters, restock (as a stock movement),
+      and validated Excel bulk import. Price changes write to the audit log.
 - [ ] Phase 5 — Dashboard + end-of-day
 - [ ] Phase 6 — Reports, users, audit, voids, MoMo/split
 - [ ] Phase 7 — Backups, recovery, performance, installer
