@@ -62,6 +62,12 @@ export function SellScreen() {
       } else if (e.key === "F4") {
         e.preventDefault();
         openTender();
+      } else if (e.key === "F6") {
+        // Toggle the last cart line between PC and BOX.
+        e.preventDefault();
+        const { lines: ls, setUnit } = useCart.getState();
+        const last = ls[ls.length - 1];
+        if (last) setUnit(last.id, last.unit === "piece" ? "box" : "piece");
       } else if (e.key === "F9") {
         e.preventDefault();
         reprintLast();
@@ -194,6 +200,24 @@ export function SellScreen() {
               ))}
             </ul>
           )}
+        </div>
+
+        {/* Keyboard shortcut hints — cashiers learn these fast (§6.1). */}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/40">
+          {[
+            ["F2", "search"],
+            ["F4", "charge"],
+            ["F6", "PC/BOX"],
+            ["F9", "reprint last"],
+            ["Esc", "cancel"],
+          ].map(([k, label]) => (
+            <span key={k}>
+              <kbd className="rounded border border-ink/15 bg-tape px-1.5 py-0.5 font-mono text-[10px] text-ink/60">
+                {k}
+              </kbd>{" "}
+              {label}
+            </span>
+          ))}
         </div>
       </section>
 
