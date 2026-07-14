@@ -52,11 +52,23 @@ Change these in Settings once that screen lands (Phase 3+).
 - [x] **Phase 2 — Sell:** barcode scan capture + manual search + quick grid, live
       receipt-tape cart with PC/BOX pricing, cash tender with change due, and the
       sale committed in one transaction with stock decrement + movements.
-- [ ] Phase 3 — Print (ESC/POS, reprints, F9)
+- [x] **Phase 3 — Print:** ESC/POS receipt generation + auto-print with OS/HTML
+      fallback, the Reprints screen (search + preview + reprint), F9 reprint-last,
+      and Settings printer config with a test print. (Thermal USB write in Rust is
+      stubbed — see note below; the HTML/OS-dialog path works cross-platform now.)
 - [ ] Phase 4 — Products CRUD, restock, Excel import
 - [ ] Phase 5 — Dashboard + end-of-day
 - [ ] Phase 6 — Reports, users, audit, voids, MoMo/split
 - [ ] Phase 7 — Backups, recovery, performance, installer
+
+## Note: thermal printing (Rust)
+
+Receipt bytes (ESC/POS) and the HTML/OS-dialog fallback are complete and work
+today. The one piece that must be finished and verified **on the Windows machine
+with the actual printer** is the raw USB write inside `print_receipt`
+(`src-tauri/src/lib.rs`) — the standard Windows path is OpenPrinter →
+StartDocPrinter → WritePrinter → ClosePrinter. Until then, sales print through the
+OS print dialog with the HTML receipt, which is a first-class fallback per the PRD.
 
 ## Methodology
 
