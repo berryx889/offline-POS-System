@@ -45,6 +45,10 @@ function toLine(p: Product, unit: Unit): CartLine {
 
 interface CartState {
   lines: CartLine[];
+  /** The line last added/incremented, plus a tick that changes on every add so the
+   *  UI can re-trigger the scan-success flash even when the same line is hit again. */
+  lastTouchedId: string | null;
+  touchTick: number;
   /** Add a product at the given unit. If a line with the same product+unit exists,
    *  increment it instead of adding a duplicate (the barcode fast-path relies on
    *  this — rescanning bumps qty). */
@@ -59,6 +63,8 @@ interface CartState {
 
 export const useCart = create<CartState>((set, get) => ({
   lines: [],
+  lastTouchedId: null,
+  touchTick: 0,
 
   add: (product, unit = "piece") =>
     set((state) => {
@@ -72,9 +78,16 @@ export const useCart = create<CartState>((set, get) => ({
           lines: state.lines.map((l) =>
             l.id === existing.id ? { ...l, qty: l.qty + 1 } : l
           ),
+          lastTouchedId: existing.id,
+          touchTick: state.touchTick + 1,
         };
       }
-      return { lines: [...state.lines, toLine(product, unit)] };
+      const line = toLine(product, unit);
+      return {
+        lines: [...state.lines, line],
+        lastTouchedId: line.id,
+        touchTick: state.touchTick + 1,
+      };
     }),
 
   setQty: (id, qty) =>

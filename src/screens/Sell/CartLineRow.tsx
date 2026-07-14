@@ -2,6 +2,7 @@
 // wholesale price (disabled when a product has none), qty is typeable (cashiers
 // sell 50 pieces at once — steppers alone are punishment), and each line removes.
 
+import { useEffect, useState } from "react";
 import { unitPrice, lineTotal, useCart, type CartLine } from "@/store/cartStore";
 import { MoneyText } from "@/components/MoneyText";
 import { cn } from "@/lib/cn";
@@ -10,10 +11,27 @@ export function CartLineRow({ line }: { line: CartLine }) {
   const setUnit = useCart((s) => s.setUnit);
   const setQty = useCart((s) => s.setQty);
   const remove = useCart((s) => s.remove);
+  const lastTouchedId = useCart((s) => s.lastTouchedId);
+  const touchTick = useCart((s) => s.touchTick);
   const canBox = line.wholesalePesewas != null;
 
+  // 80ms background flash when this line is the one just scanned/added (§9.6).
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (lastTouchedId !== line.id) return;
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 220);
+    return () => clearTimeout(t);
+    // touchTick re-triggers the flash even when the same line is hit again.
+  }, [touchTick, lastTouchedId, line.id]);
+
   return (
-    <div className="group border-b border-dashed border-ink/15 py-2">
+    <div
+      className={cn(
+        "group border-b border-dashed border-ink/15 py-2 transition-colors duration-200",
+        flash && "bg-brass/15"
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-semibold leading-tight">{line.name}</span>
         <button
