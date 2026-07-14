@@ -8,6 +8,7 @@ import { getSettings } from "@/db/queries/settings";
 import { useSession } from "@/store/sessionStore";
 import { Icon } from "@/components/Icon";
 import { PinPad } from "./PinPad";
+import { RecoverBox } from "./RecoverBox";
 import { cn } from "@/lib/cn";
 
 export function LoginScreen() {
@@ -19,6 +20,7 @@ export function LoginScreen() {
   const [pin, setPin] = useState("");
   const [shake, setShake] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
 
   const maxLength = selected?.role === "admin" ? 6 : 4;
 
@@ -54,7 +56,9 @@ export function LoginScreen() {
         </div>
 
         <div className="p-8">
-          {!selected ? (
+          {recovering ? (
+            <RecoverBox onDone={() => setRecovering(false)} />
+          ) : !selected ? (
             <div className="space-y-3">
               <p className="mb-4 text-center text-sm text-ink/50">Who's on the counter?</p>
               {users.map((u) => (
@@ -88,6 +92,12 @@ export function LoginScreen() {
               {users.length === 0 && (
                 <p className="py-6 text-center text-sm text-ink/40">Setting up…</p>
               )}
+              <button
+                onClick={() => setRecovering(true)}
+                className="mt-2 w-full pt-2 text-center text-sm text-carbon hover:underline"
+              >
+                Forgot PIN?
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center">

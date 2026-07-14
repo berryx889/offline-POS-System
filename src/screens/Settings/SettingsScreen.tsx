@@ -8,6 +8,7 @@ import { testPrint } from "@/receipt/print";
 import { emit } from "@/lib/events";
 import { cn } from "@/lib/cn";
 import { UsersSection } from "./UsersSection";
+import { RecoverySection } from "./RecoverySection";
 import { BackupSection } from "./BackupSection";
 import { AuditSection } from "./AuditSection";
 
@@ -110,6 +111,7 @@ export function SettingsScreen() {
       </div>
 
       <UsersSection />
+      <RecoverySection />
       <BackupSection />
       <AuditSection />
     </div>
