@@ -3,6 +3,7 @@
 
 import { native } from "@/native";
 import { logAudit } from "./audit";
+import { isFtsReady, toFtsQuery } from "../fts";
 
 export interface Product {
   id: number;
@@ -57,10 +58,28 @@ export async function listProductsManage(filter: ProductFilter = {}): Promise<Pr
   return native.select<Product>(`${SELECT_PRODUCT} ${clause} ORDER BY p.name`, params);
 }
 
-/** Search active products by name or category (Phase 2: LIKE; FTS5 comes later
- *  for the 10k-catalog performance target). */
+/** Search active products by name or category. Uses the FTS5 index when available
+ *  (<100ms on a 10k catalog, §10), else falls back to LIKE. */
 export async function searchProducts(term: string, limit = 20): Promise<Product[]> {
-  const q = `%${term.trim()}%`;
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+
+  if (isFtsReady()) {
+    try {
+      return await native.select<Product>(
+        `${SELECT_PRODUCT}
+           JOIN products_fts f ON f.rowid = p.id
+          WHERE p.active = 1 AND products_fts MATCH ?
+          ORDER BY rank
+          LIMIT ?`,
+        [toFtsQuery(trimmed), limit]
+      );
+    } catch {
+      /* malformed MATCH — fall through to LIKE */
+    }
+  }
+
+  const q = `%${trimmed}%`;
   return native.select<Product>(
     `${SELECT_PRODUCT}
       WHERE p.active = 1 AND (p.name LIKE ? OR c.name LIKE ?)

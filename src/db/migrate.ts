@@ -4,6 +4,7 @@
 import { native } from "@/native";
 import schema from "./schema.sql?raw";
 import { seedIfEmpty } from "./seed";
+import { setupFts } from "./fts";
 import { autoSnapshotIfDue } from "@/backup/service";
 
 const SCHEMA_VERSION = 1;
@@ -45,6 +46,9 @@ async function runMigrate(): Promise<void> {
   }
 
   await seedIfEmpty();
+
+  // Build the full-text search index (falls back to LIKE if FTS5 is unavailable).
+  await setupFts();
 
   // Daily local snapshot (best-effort; never blocks startup).
   autoSnapshotIfDue().catch(() => {});
