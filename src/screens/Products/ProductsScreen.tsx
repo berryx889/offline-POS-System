@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listProductsManage, listCategories, type Product } from "@/db/queries/products";
 import { ProductDrawer } from "./ProductDrawer";
+import { RestockDialog } from "./RestockDialog";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
@@ -17,6 +18,7 @@ export function ProductsScreen() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [drawer, setDrawer] = useState<DrawerState>(null);
+  const [restockTarget, setRestockTarget] = useState<Product | null>(null);
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
   const { data: products = [], isLoading } = useQuery({
@@ -77,6 +79,7 @@ export function ProductsScreen() {
               <th className="px-4 py-3 font-medium">Stock</th>
               <th className="px-4 py-3 text-right font-medium">Retail / pc</th>
               <th className="px-4 py-3 text-right font-medium">Wholesale / box</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -112,12 +115,23 @@ export function ProductsScreen() {
                       <span className="text-ink/30">—</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRestockTarget(p);
+                      }}
+                      className="rounded-lg border border-ink/15 px-3 py-1 text-xs font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+                    >
+                      Restock
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {!isLoading && products.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-ink/40">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-ink/40">
                   No products found. Add your first product, or clear the filters.
                 </td>
               </tr>
@@ -131,6 +145,9 @@ export function ProductsScreen() {
           product={drawer.mode === "edit" ? drawer.product : null}
           onClose={() => setDrawer(null)}
         />
+      )}
+      {restockTarget && (
+        <RestockDialog product={restockTarget} onClose={() => setRestockTarget(null)} />
       )}
     </div>
   );
