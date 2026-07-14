@@ -1,0 +1,28 @@
+[package]
+name = "countertop-pos"
+version = "0.1.0"
+description = "CounterTop POS — offline desktop point-of-sale"
+authors = ["Berry September"]
+edition = "2021"
+
+# See https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "countertop_pos_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+argon2 = "0.5"
+rand = "0.8"
+
+[features]
+# This feature is used for production builds where `devUrl` is not needed.
+custom-protocol = ["tauri/custom-protocol"]
