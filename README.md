@@ -49,7 +49,9 @@ Change these in Settings once that screen lands (Phase 3+).
 
 - [x] **Phase 1 — Skeleton:** scaffold, SQLite schema + migration + seed, PIN login,
       nav rail, routed screens, read-only Products list proving the stack.
-- [ ] Phase 2 — Sell (scan, search, cart, cash tender, sale transaction)
+- [x] **Phase 2 — Sell:** barcode scan capture + manual search + quick grid, live
+      receipt-tape cart with PC/BOX pricing, cash tender with change due, and the
+      sale committed in one transaction with stock decrement + movements.
 - [ ] Phase 3 — Print (ESC/POS, reprints, F9)
 - [ ] Phase 4 — Products CRUD, restock, Excel import
 - [ ] Phase 5 — Dashboard + end-of-day
