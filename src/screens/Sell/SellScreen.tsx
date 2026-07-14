@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts, findByBarcode, type Product } from "@/db/queries/products";
 import { getSettings } from "@/db/queries/settings";
-import type { CommittedSale } from "@/db/queries/sales";
+import { getSaleDetail, type CommittedSale } from "@/db/queries/sales";
+import { printSale } from "@/receipt/print";
 import { useCart } from "@/store/cartStore";
 import { ReceiptTape } from "@/components/ReceiptTape";
 import { MoneyText } from "@/components/MoneyText";
@@ -92,15 +93,24 @@ export function SellScreen() {
     focusScan();
   }
 
-  function onSaleDone(sale: CommittedSale) {
+  async function onSaleDone(sale: CommittedSale) {
     setTenderOpen(false);
     setLastSale(sale);
     // Stock changed — refresh reads that depend on it.
     queryClient.invalidateQueries({ queryKey: ["products"] });
     queryClient.invalidateQueries({ queryKey: ["top-products"] });
     queryClient.invalidateQueries({ queryKey: ["search"] });
-    setTimeout(() => setLastSale(null), 6000);
+    queryClient.invalidateQueries({ queryKey: ["sales"] });
     focusScan();
+
+    // Auto-print the receipt (best-effort; the sale is already committed).
+    try {
+      const detail = await getSaleDetail(sale.saleId);
+      if (detail && settings) await printSale(detail, settings);
+    } catch {
+      /* printing never blocks the sale */
+    }
+    setTimeout(() => setLastSale(null), 6000);
   }
 
   return (

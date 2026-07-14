@@ -46,6 +46,100 @@ function pad(n: number): string {
   return `R-${String(n).padStart(6, "0")}`;
 }
 
+// ---- Reads (reprints, previews, dashboard) --------------------------------
+
+export interface SaleRow {
+  id: number;
+  receipt_no: string;
+  user_id: number;
+  cashier_name: string;
+  subtotal_pesewas: number;
+  discount_pesewas: number;
+  total_pesewas: number;
+  amount_paid_pesewas: number;
+  change_pesewas: number;
+  payment_method: PaymentMethod;
+  cash_part_pesewas: number;
+  momo_part_pesewas: number;
+  momo_reference: string | null;
+  status: "completed" | "voided";
+  created_at: string;
+}
+
+export interface SaleItemRow {
+  product_name: string;
+  unit: "piece" | "box";
+  qty: number;
+  unit_price_pesewas: number;
+  line_total_pesewas: number;
+}
+
+export interface SaleDetail {
+  sale: SaleRow;
+  items: SaleItemRow[];
+}
+
+const SELECT_SALE = `
+  SELECT s.id, s.receipt_no, s.user_id, u.name AS cashier_name, s.subtotal_pesewas,
+         s.discount_pesewas, s.total_pesewas, s.amount_paid_pesewas, s.change_pesewas,
+         s.payment_method, s.cash_part_pesewas, s.momo_part_pesewas, s.momo_reference,
+         s.status, s.created_at
+    FROM sales s
+    JOIN users u ON u.id = s.user_id`;
+
+export async function getSaleDetail(saleId: number): Promise<SaleDetail | null> {
+  const [sale] = await native.select<SaleRow>(`${SELECT_SALE} WHERE s.id = ?`, [saleId]);
+  if (!sale) return null;
+  const items = await native.select<SaleItemRow>(
+    `SELECT product_name, unit, qty, unit_price_pesewas, line_total_pesewas
+       FROM sale_items WHERE sale_id = ? ORDER BY id`,
+    [saleId]
+  );
+  return { sale, items };
+}
+
+export interface SalesFilter {
+  text?: string; // matches receipt_no, cashier, or a product on the sale
+  from?: string; // ISO date (inclusive)
+  to?: string; // ISO date (inclusive)
+  limit?: number;
+}
+
+export async function listSales(filter: SalesFilter = {}): Promise<SaleRow[]> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (filter.text && filter.text.trim()) {
+    const q = `%${filter.text.trim()}%`;
+    where.push(
+      `(s.receipt_no LIKE ? OR u.name LIKE ? OR EXISTS (
+          SELECT 1 FROM sale_items si WHERE si.sale_id = s.id AND si.product_name LIKE ?))`
+    );
+    params.push(q, q, q);
+  }
+  if (filter.from) {
+    where.push("s.created_at >= ?");
+    params.push(filter.from);
+  }
+  if (filter.to) {
+    where.push("s.created_at <= ?");
+    params.push(filter.to);
+  }
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  params.push(filter.limit ?? 100);
+  return native.select<SaleRow>(
+    `${SELECT_SALE} ${clause} ORDER BY s.seq DESC LIMIT ?`,
+    params
+  );
+}
+
+/** The most recent completed sale — for F9 "reprint last". */
+export async function getLastSale(): Promise<SaleDetail | null> {
+  const [row] = await native.select<{ id: number }>(
+    "SELECT id FROM sales WHERE status = 'completed' ORDER BY seq DESC LIMIT 1"
+  );
+  return row ? getSaleDetail(row.id) : null;
+}
+
 async function nextSequence(name: string): Promise<number> {
   await native.execute("UPDATE sequences SET value = value + 1 WHERE name = ?", [name]);
   const rows = await native.select<{ value: number }>(
