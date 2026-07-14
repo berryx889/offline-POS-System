@@ -64,7 +64,10 @@ Change these in Settings once that screen lands (Phase 3+).
       reverse-chronological feed, hourly SVG chart today-vs-last-week, top products,
       low-stock alerts) refreshing on the sale:completed event; end-of-day screen
       with drawer reconciliation (over/short) and a printed Z-report + day_close.
-- [ ] Phase 6 — Reports, users, audit, voids, MoMo/split
+- [x] **Phase 6 — Admin depth:** reports (date-range summary, by product/category/
+      cashier, voided log, stock movements) with multi-sheet Excel export; MoMo &
+      split tender; sale voids (manager-override, restores stock, audited); users &
+      PINs management; and the audit-log viewer.
 - [ ] Phase 7 — Backups, recovery, performance, installer
 
 ## Note: thermal printing (Rust)
