@@ -3,6 +3,8 @@
 
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
+import { readFile, writeFile, remove } from "@tauri-apps/plugin-fs";
+import { appConfigDir, join } from "@tauri-apps/api/path";
 import type { ExecuteResult, NativeAdapter } from "./types";
 
 let dbPromise: Promise<Database> | null = null;
@@ -53,5 +55,28 @@ export const tauriAdapter: NativeAdapter = {
   },
   openCashDrawer(printerName) {
     return invoke<void>("open_cash_drawer", { printerName: printerName ?? null });
+  },
+
+  // The plugin-sql database file lives in the app config dir as pos.db. NOTE:
+  // confirm this path on the Windows build; if the plugin resolves elsewhere,
+  // this is the one string to adjust.
+  async exportDatabase() {
+    const dir = await appConfigDir();
+    const path = await join(dir, "pos.db");
+    return readFile(path);
+  },
+  async importDatabase(bytes) {
+    const dir = await appConfigDir();
+    const path = await join(dir, "pos.db");
+    await writeFile(path, bytes);
+    // Drop WAL sidecars so the restored main file is authoritative on reopen.
+    for (const side of ["pos.db-wal", "pos.db-shm"]) {
+      try {
+        await remove(await join(dir, side));
+      } catch {
+        /* sidecar may not exist */
+      }
+    }
+    // The caller relaunches the app so the sql plugin reopens the new file.
   },
 };

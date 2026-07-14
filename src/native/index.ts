@@ -54,6 +54,14 @@ export const native: NativeAdapter = {
     cached ??= await resolveAdapter();
     return cached.openCashDrawer(printerName);
   },
+  async exportDatabase() {
+    cached ??= await resolveAdapter();
+    return cached.exportDatabase();
+  },
+  async importDatabase(bytes) {
+    cached ??= await resolveAdapter();
+    return cached.importDatabase(bytes);
+  },
 };
 
 export type { NativeAdapter } from "./types";

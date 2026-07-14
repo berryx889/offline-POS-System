@@ -89,4 +89,15 @@ export const mockAdapter: NativeAdapter = {
   async openCashDrawer() {
     console.info("[mock openCashDrawer] (dev, no drawer)");
   },
+
+  async exportDatabase() {
+    const d = await db();
+    return d.export();
+  },
+  async importDatabase(bytes) {
+    const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+    database = new SQL.Database(bytes);
+    database.run("PRAGMA foreign_keys = ON;");
+    persist(database);
+  },
 };

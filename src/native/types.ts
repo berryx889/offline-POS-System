@@ -24,6 +24,11 @@ export interface NativeAdapter {
   printReceipt(bytes: Uint8Array, printerName?: string): Promise<void>;
   openCashDrawer(printerName?: string): Promise<void>;
 
+  /** The whole database as bytes, for backups. */
+  exportDatabase(): Promise<Uint8Array>;
+  /** Replace the database with these bytes (restore). Caller reloads after. */
+  importDatabase(bytes: Uint8Array): Promise<void>;
+
   /** 'tauri' in the installed app, 'mock' during `npm run dev` in a browser. */
   readonly kind: "tauri" | "mock";
 }

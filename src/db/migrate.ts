@@ -4,6 +4,7 @@
 import { native } from "@/native";
 import schema from "./schema.sql?raw";
 import { seedIfEmpty } from "./seed";
+import { autoSnapshotIfDue } from "@/backup/service";
 
 const SCHEMA_VERSION = 1;
 
@@ -44,4 +45,7 @@ async function runMigrate(): Promise<void> {
   }
 
   await seedIfEmpty();
+
+  // Daily local snapshot (best-effort; never blocks startup).
+  autoSnapshotIfDue().catch(() => {});
 }
