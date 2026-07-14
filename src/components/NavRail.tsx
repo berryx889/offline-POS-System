@@ -14,6 +14,7 @@ const ITEMS: Item[] = [
   { to: "/reprints", label: "Reprints", icon: "🖨" },
   { to: "/products", label: "Products", icon: "📦", adminOnly: true },
   { to: "/dashboard", label: "Dashboard", icon: "📊", adminOnly: true },
+  { to: "/end-of-day", label: "End day", icon: "🔒", adminOnly: true },
   { to: "/reports", label: "Reports", icon: "📈", adminOnly: true },
   { to: "/settings", label: "Settings", icon: "⚙", adminOnly: true },
 ];

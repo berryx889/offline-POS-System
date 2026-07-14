@@ -74,6 +74,23 @@ export async function printSale(
   return { ok: true, method: "html" };
 }
 
+/** Print arbitrary fixed-width text (used by the test print and the Z-report).
+ *  Routes to the thermal printer if configured, else the OS/HTML dialog. */
+export async function printPlainText(text: string, settings: Settings): Promise<PrintResult> {
+  const printerName = settings.printer_name?.trim();
+  if (printerName) {
+    try {
+      await native.printReceipt(encodeEscPos(text, { cut: true }), printerName);
+      return { ok: true, method: "thermal" };
+    } catch (e) {
+      openHtmlReceipt(text);
+      return { ok: false, method: "html", error: String(e) };
+    }
+  }
+  openHtmlReceipt(text);
+  return { ok: true, method: "html" };
+}
+
 /** Settings → test print: a tiny fixed receipt to confirm the printer works. */
 export async function testPrint(settings: Settings): Promise<PrintResult> {
   const width = settings.paper_width === "58" ? 32 : 42;

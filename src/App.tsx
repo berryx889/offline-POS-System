@@ -9,6 +9,7 @@ import { SellScreen } from "@/screens/Sell/SellScreen";
 import { ReprintsScreen } from "@/screens/Reprints/ReprintsScreen";
 import { ProductsScreen } from "@/screens/Products/ProductsScreen";
 import { DashboardScreen } from "@/screens/Dashboard/DashboardScreen";
+import { EndOfDayScreen } from "@/screens/EndOfDay/EndOfDayScreen";
 import { ReportsScreen } from "@/screens/Reports/ReportsScreen";
 import { SettingsScreen } from "@/screens/Settings/SettingsScreen";
 
@@ -27,6 +28,7 @@ export function App() {
           <Route path="/reprints" element={<ReprintsScreen />} />
           {isAdmin && <Route path="/products" element={<ProductsScreen />} />}
           {isAdmin && <Route path="/dashboard" element={<DashboardScreen />} />}
+          {isAdmin && <Route path="/end-of-day" element={<EndOfDayScreen />} />}
           {isAdmin && <Route path="/reports" element={<ReportsScreen />} />}
           {isAdmin && <Route path="/settings" element={<SettingsScreen />} />}
           <Route path="*" element={<Navigate to="/sell" replace />} />
