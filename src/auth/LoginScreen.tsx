@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listActiveUsers, authenticate, type User } from "@/db/queries/users";
 import { getSettings } from "@/db/queries/settings";
 import { useSession } from "@/store/sessionStore";
+import { Icon } from "@/components/Icon";
 import { PinPad } from "./PinPad";
 import { cn } from "@/lib/cn";
 
@@ -37,66 +38,89 @@ export function LoginScreen() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper p-6">
-      <div className="w-full max-w-md rounded-2xl border border-ink/10 bg-tape p-8 shadow-card">
-        <div className="mb-8 text-center">
-          <h1 className="font-sans text-xl font-semibold text-ledger">
+      {/* subtle ledger backdrop band */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-ledger" />
+
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-ink/10 bg-tape shadow-card">
+        {/* Brand header */}
+        <div className="flex flex-col items-center bg-ledger px-8 pb-7 pt-8 text-tape">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-tape/15">
+            <Icon name="store" size={28} />
+          </div>
+          <h1 className="font-sans text-lg font-semibold">
             {settings?.business_name ?? "CounterTop POS"}
           </h1>
-          <p className="mt-1 text-xs text-ink/50">{settings?.address ?? ""}</p>
+          {settings?.address && <p className="mt-0.5 text-xs text-tape/70">{settings.address}</p>}
         </div>
 
-        {!selected ? (
-          <div className="space-y-3">
-            <p className="text-center text-sm text-ink/60">Who's on the counter?</p>
-            {users.map((u) => (
+        <div className="p-8">
+          {!selected ? (
+            <div className="space-y-3">
+              <p className="mb-4 text-center text-sm text-ink/50">Who's on the counter?</p>
+              {users.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => {
+                    setSelected(u);
+                    setPin("");
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border border-ink/10 bg-paper px-4 py-3.5 text-left",
+                    "transition-colors hover:border-ledger/30 hover:bg-ledger/5",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-carbon"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold",
+                      u.role === "admin" ? "bg-ledger text-tape" : "bg-carbon/15 text-carbon"
+                    )}
+                  >
+                    {u.name[0]?.toUpperCase()}
+                  </span>
+                  <span className="flex-1">
+                    <span className="block font-sans font-semibold text-ink">{u.name}</span>
+                    <span className="block text-xs uppercase tracking-wide text-ink/40">{u.role}</span>
+                  </span>
+                  <span className="text-lg text-ink/25">›</span>
+                </button>
+              ))}
+              {users.length === 0 && (
+                <p className="py-6 text-center text-sm text-ink/40">Setting up…</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
               <button
-                key={u.id}
-                onClick={() => {
-                  setSelected(u);
-                  setPin("");
-                }}
+                onClick={() => setSelected(null)}
+                className="mb-5 flex items-center gap-1 self-start text-sm text-carbon hover:underline"
+              >
+                ‹ Not {selected.name}?
+              </button>
+              <p className="mb-5 text-sm text-ink/60">
+                Enter {selected.name}'s {maxLength}-digit PIN
+              </p>
+              <PinPad
+                value={pin}
+                onChange={setPin}
+                onSubmit={submit}
+                maxLength={maxLength}
+                shake={shake}
+              />
+              <button
+                onClick={submit}
+                disabled={pin.length < maxLength || busy}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-xl border border-ink/10 bg-paper",
-                  "px-4 py-4 text-left transition-colors hover:bg-ledger/5",
-                  "focus:outline-none focus:ring-2 focus:ring-carbon"
+                  "mt-6 h-14 w-full max-w-xs rounded-xl bg-ledger text-lg font-semibold text-tape",
+                  "transition-colors hover:bg-ledger-deep disabled:opacity-40",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-carbon"
                 )}
               >
-                <span className="font-sans font-semibold text-ink">{u.name}</span>
-                <span className="text-xs uppercase tracking-wide text-ink/40">{u.role}</span>
+                {busy ? "Checking…" : "Enter"}
               </button>
-            ))}
-            {users.length === 0 && (
-              <p className="py-6 text-center text-sm text-ink/40">Setting up…</p>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <button
-              onClick={() => setSelected(null)}
-              className="mb-4 self-start text-xs text-carbon hover:underline"
-            >
-              ← {selected.name}
-            </button>
-            <PinPad
-              value={pin}
-              onChange={setPin}
-              onSubmit={submit}
-              maxLength={maxLength}
-              shake={shake}
-            />
-            <button
-              onClick={submit}
-              disabled={pin.length < maxLength || busy}
-              className={cn(
-                "mt-6 h-14 w-full max-w-xs rounded-xl bg-ledger text-lg font-semibold text-tape",
-                "transition-colors hover:bg-ledger-deep disabled:opacity-40",
-                "focus:outline-none focus:ring-2 focus:ring-carbon"
-              )}
-            >
-              {busy ? "Checking…" : "Enter"}
-            </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
