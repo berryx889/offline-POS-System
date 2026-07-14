@@ -32,3 +32,9 @@
   20%, 60% { transform: translateX(-6px); }
   40%, 80% { transform: translateX(6px); }
 }
+
+/* Live-feed entries slide down 12px and fade in (pos-prd.md §9.6). */
+@keyframes slidein {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
