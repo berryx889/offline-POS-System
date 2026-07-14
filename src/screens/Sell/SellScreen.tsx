@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts, findByBarcode, type Product } from "@/db/queries/products";
 import { getSettings } from "@/db/queries/settings";
-import { getSaleDetail, type CommittedSale } from "@/db/queries/sales";
+import { getSaleDetail, getLastSale, type CommittedSale } from "@/db/queries/sales";
 import { printSale } from "@/receipt/print";
 import { useCart } from "@/store/cartStore";
 import { ReceiptTape } from "@/components/ReceiptTape";
@@ -62,6 +62,9 @@ export function SellScreen() {
       } else if (e.key === "F4") {
         e.preventDefault();
         openTender();
+      } else if (e.key === "F9") {
+        e.preventDefault();
+        reprintLast();
       }
     }
     document.addEventListener("click", onDocClick);
@@ -91,6 +94,12 @@ export function SellScreen() {
     beepSuccess(soundOn);
     setTerm("");
     focusScan();
+  }
+
+  // F9: reprint the most recent receipt without leaving the sale flow (§6.2).
+  async function reprintLast() {
+    const [detail, freshSettings] = await Promise.all([getLastSale(), getSettings()]);
+    if (detail) await printSale(detail, freshSettings, { reprint: true });
   }
 
   async function onSaleDone(sale: CommittedSale) {
