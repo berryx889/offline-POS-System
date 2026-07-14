@@ -60,7 +60,10 @@ Change these in Settings once that screen lands (Phase 3+).
       retail/wholesale, scan-to-fill barcode, inline categories), deactivate-vs-
       delete, search/category/low-stock filters, restock (as a stock movement),
       and validated Excel bulk import. Price changes write to the audit log.
-- [ ] Phase 5 — Dashboard + end-of-day
+- [x] **Phase 5 — Money views:** live dashboard (today's revenue, cash position,
+      reverse-chronological feed, hourly SVG chart today-vs-last-week, top products,
+      low-stock alerts) refreshing on the sale:completed event; end-of-day screen
+      with drawer reconciliation (over/short) and a printed Z-report + day_close.
 - [ ] Phase 6 — Reports, users, audit, voids, MoMo/split
 - [ ] Phase 7 — Backups, recovery, performance, installer
 
