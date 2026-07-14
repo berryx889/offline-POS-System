@@ -7,6 +7,8 @@ import { getSettings, setSetting, type Settings } from "@/db/queries/settings";
 import { testPrint } from "@/receipt/print";
 import { emit } from "@/lib/events";
 import { cn } from "@/lib/cn";
+import { UsersSection } from "./UsersSection";
+import { AuditSection } from "./AuditSection";
 
 export function SettingsScreen() {
   const queryClient = useQueryClient();
@@ -96,7 +98,7 @@ export function SettingsScreen() {
         </button>
       </Section>
 
-      <div className="mt-6 flex items-center gap-4">
+      <div className="mb-6 flex items-center gap-4">
         <button
           onClick={save}
           className="h-12 rounded-xl bg-ledger px-8 font-semibold text-tape shadow-card hover:bg-ledger-deep focus:outline-none focus:ring-2 focus:ring-carbon"
@@ -105,6 +107,9 @@ export function SettingsScreen() {
         </button>
         {status && <span className="text-sm text-ledger">{status}</span>}
       </div>
+
+      <UsersSection />
+      <AuditSection />
     </div>
   );
 }

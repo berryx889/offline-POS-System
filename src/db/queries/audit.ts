@@ -13,3 +13,22 @@ export async function logAudit(
     [userId, action, JSON.stringify(detail), new Date().toISOString()]
   );
 }
+
+export interface AuditEntry {
+  id: number;
+  action: string;
+  detail: string | null;
+  user_name: string | null;
+  created_at: string;
+}
+
+export async function listAudit(limit = 200): Promise<AuditEntry[]> {
+  return native.select<AuditEntry>(
+    `SELECT a.id, a.action, a.detail, u.name AS user_name, a.created_at
+       FROM audit_log a
+       LEFT JOIN users u ON u.id = a.user_id
+      ORDER BY a.id DESC
+      LIMIT ?`,
+    [limit]
+  );
+}

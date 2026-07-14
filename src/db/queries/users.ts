@@ -2,6 +2,7 @@
 // query module).
 
 import { native } from "@/native";
+import { logAudit } from "./audit";
 
 export type Role = "admin" | "cashier";
 
@@ -16,6 +17,41 @@ export async function listActiveUsers(): Promise<User[]> {
   return native.select<User>(
     "SELECT id, name, role, active FROM users WHERE active = 1 ORDER BY role, name"
   );
+}
+
+export async function listAllUsers(): Promise<User[]> {
+  return native.select<User>("SELECT id, name, role, active FROM users ORDER BY role, name");
+}
+
+/** Admin PINs are 6 digits, cashier PINs 4 (pos-prd.md §2). */
+export function pinLengthFor(role: Role): number {
+  return role === "admin" ? 6 : 4;
+}
+
+export async function createUser(
+  name: string,
+  role: Role,
+  pin: string,
+  actorId: number
+): Promise<number> {
+  const hash = await native.hashPin(pin);
+  const res = await native.execute(
+    "INSERT INTO users (name, role, pin_hash, active, created_at) VALUES (?, ?, ?, 1, ?)",
+    [name.trim(), role, hash, new Date().toISOString()]
+  );
+  await logAudit(actorId, "user_create", { user_id: res.lastInsertId, name, role });
+  return res.lastInsertId!;
+}
+
+export async function resetPin(userId: number, newPin: string, actorId: number): Promise<void> {
+  const hash = await native.hashPin(newPin);
+  await native.execute("UPDATE users SET pin_hash = ? WHERE id = ?", [hash, userId]);
+  await logAudit(actorId, "pin_reset", { user_id: userId });
+}
+
+export async function setUserActive(userId: number, active: boolean, actorId: number): Promise<void> {
+  await native.execute("UPDATE users SET active = ? WHERE id = ?", [active ? 1 : 0, userId]);
+  await logAudit(actorId, active ? "user_activate" : "user_deactivate", { user_id: userId });
 }
 
 /** Verify a PIN belongs to any active admin (manager-override for voids, price
