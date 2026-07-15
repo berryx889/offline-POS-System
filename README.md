@@ -93,6 +93,25 @@ here and verified there:
 4. **FTS5:** the bundled SQLite includes FTS5, so `setupFts()` will succeed and
    search uses the index automatically (the dev sql.js build falls back to LIKE).
 
+## Room to grow: an online mode (future)
+
+v1 is deliberately **offline, single-machine** (the PRD's core premise). If you
+later want a shared/online version — multiple tills seeing the same stock, a
+cloud database — you do **not** rewrite the app. Because every platform and data
+call goes through the one `src/native/` boundary, you:
+
+1. Add `src/native/web.ts` implementing the same `NativeAdapter`, where
+   `select`/`execute` hit a backend API (a hosted libSQL/Turso, or your own
+   server) instead of local SQLite. The SQL can stay the same.
+2. Move PIN hashing **server-side** — client-side hashing is never trustworthy
+   (the browser mock's hash is dev-only), so the web adapter calls an auth
+   endpoint that runs argon2 on the server.
+3. Add a `kind: "web"` branch in `src/native/index.ts` (there's a signpost
+   comment there).
+
+Screens, stores, and query modules stay untouched — that boundary is exactly what
+keeps this door open (it's also why the Tauri→Electron fallback stays available).
+
 ## Methodology
 
 This project is built with the **practical-vibe-coding** skill (`.claude/skills/`):
