@@ -35,6 +35,7 @@ export function TenderPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lines = useCart((s) => s.lines);
+  const discountPesewas = useCart((s) => s.discountPesewas);
   const clear = useCart((s) => s.clear);
   const userId = useSession((s) => s.user?.id);
 
@@ -68,7 +69,7 @@ export function TenderPanel({
                 cashPartPesewas: splitCash,
                 momoPartPesewas: splitMomo,
               };
-      const sale = await commitSale({ userId, lines, payment });
+      const sale = await commitSale({ userId, lines, payment, discountPesewas });
       emit("sale:completed", { saleId: sale.saleId });
       emit("stock:changed");
       clear();

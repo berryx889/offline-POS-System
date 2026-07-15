@@ -19,6 +19,7 @@ export function ReceiptTape({
   subtitle,
   children,
   subtotalPesewas,
+  discountPesewas,
   totalPesewas,
   banner,
   footer,
@@ -27,6 +28,7 @@ export function ReceiptTape({
   subtitle?: string;
   children: ReactNode;
   subtotalPesewas?: number;
+  discountPesewas?: number;
   totalPesewas?: number;
   banner?: string; // e.g. "*REPRINT*"
   footer?: ReactNode;
@@ -56,6 +58,14 @@ export function ReceiptTape({
             <div className="flex justify-between text-sm text-ink/70">
               <span>SUBTOTAL</span>
               <MoneyText pesewas={subtotalPesewas} />
+            </div>
+          )}
+          {discountPesewas != null && discountPesewas > 0 && (
+            <div className="flex justify-between text-sm text-brass">
+              <span>DISCOUNT</span>
+              <span>
+                −<MoneyText pesewas={discountPesewas} />
+              </span>
             </div>
           )}
           <div className="mt-1 flex items-baseline justify-between">

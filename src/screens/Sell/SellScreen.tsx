@@ -9,12 +9,14 @@ import { searchProducts, findByBarcode, type Product } from "@/db/queries/produc
 import { getSettings } from "@/db/queries/settings";
 import { getSaleDetail, getLastSale, type CommittedSale } from "@/db/queries/sales";
 import { printSale } from "@/receipt/print";
+import { native } from "@/native";
 import { useCart } from "@/store/cartStore";
 import { ReceiptTape } from "@/components/ReceiptTape";
 import { MoneyText } from "@/components/MoneyText";
 import { CartLineRow } from "./CartLineRow";
 import { QuickGrid } from "./QuickGrid";
 import { TenderPanel } from "./TenderPanel";
+import { DiscountControl } from "./DiscountControl";
 import { beepSuccess, beepError } from "@/lib/sound";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
@@ -40,7 +42,8 @@ export function SellScreen() {
   const add = useCart((s) => s.add);
   const clear = useCart((s) => s.clear);
   const subtotal = useCart((s) => s.subtotal());
-  const total = subtotal; // discounts land in Phase 6
+  const discount = useCart((s) => s.discountPesewas);
+  const total = useCart((s) => s.total());
 
   const focusScan = () => scanRef.current?.focus();
   const openTender = () => {
@@ -118,12 +121,16 @@ export function SellScreen() {
     queryClient.invalidateQueries({ queryKey: ["sales"] });
     focusScan();
 
-    // Auto-print the receipt (best-effort; the sale is already committed).
-    try {
-      const detail = await getSaleDetail(sale.saleId);
-      if (detail && settings) await printSale(detail, settings);
-    } catch {
-      /* printing never blocks the sale */
+    // Auto-print the receipt (best-effort; the sale is already committed). Skipped
+    // in the browser dev mock — there's no printer, and the HTML fallback would pop
+    // a blocking print dialog on every sale. Real builds (Tauri) always auto-print.
+    if (native.kind !== "mock") {
+      try {
+        const detail = await getSaleDetail(sale.saleId);
+        if (detail && settings) await printSale(detail, settings);
+      } catch {
+        /* printing never blocks the sale */
+      }
     }
     setTimeout(() => setLastSale(null), 6000);
   }
@@ -240,6 +247,7 @@ export function SellScreen() {
             businessName={settings?.business_name ?? "CounterTop POS"}
             subtitle={settings?.address}
             subtotalPesewas={lines.length ? subtotal : undefined}
+            discountPesewas={discount}
             totalPesewas={lines.length ? total : undefined}
           >
             {lines.length === 0 ? (
@@ -253,6 +261,7 @@ export function SellScreen() {
         </div>
 
         <div className="mt-3 space-y-2">
+          {lines.length > 0 && <DiscountControl subtotalPesewas={subtotal} />}
           <button
             onClick={openTender}
             disabled={lines.length === 0}

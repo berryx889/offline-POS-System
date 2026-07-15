@@ -17,11 +17,15 @@ export interface CartLine {
   wholesalePesewas: number | null;
   unit: Unit;
   qty: number;
+  /** Admin-only per-line price override (pos-prd.md §6.1). Cleared when the unit
+   *  toggles so it never silently sticks to the wrong base price. */
+  overridePesewas?: number | null;
 }
 
-/** Price for the line's current unit. Box uses wholesale; falls back to retail
- *  only if somehow toggled without a wholesale price (guarded in the UI). */
+/** Effective unit price: an admin override wins; otherwise box uses wholesale,
+ *  piece uses retail (falling back to retail if toggled without a wholesale). */
 export function unitPrice(line: CartLine): number {
+  if (line.overridePesewas != null) return line.overridePesewas;
   if (line.unit === "box") return line.wholesalePesewas ?? line.retailPesewas;
   return line.retailPesewas;
 }
@@ -55,9 +59,16 @@ interface CartState {
   add: (product: Product, unit?: Unit) => void;
   setQty: (id: string, qty: number) => void;
   setUnit: (id: string, unit: Unit) => void;
+  /** Admin price override for a line; null clears it back to the base price. */
+  setOverride: (id: string, pesewas: number | null) => void;
   remove: (id: string) => void;
   clear: () => void;
+  /** Whole-sale discount in pesewas (pos-prd.md §6.1). */
+  discountPesewas: number;
+  setDiscount: (pesewas: number) => void;
   subtotal: () => number;
+  /** subtotal − discount, floored at 0. */
+  total: () => number;
   itemCount: () => number;
 }
 
@@ -65,6 +76,7 @@ export const useCart = create<CartState>((set, get) => ({
   lines: [],
   lastTouchedId: null,
   touchTick: 0,
+  discountPesewas: 0,
 
   add: (product, unit = "piece") =>
     set((state) => {
@@ -103,15 +115,27 @@ export const useCart = create<CartState>((set, get) => ({
         if (l.id !== id) return l;
         // Can't switch to box without a wholesale price.
         if (unit === "box" && l.wholesalePesewas == null) return l;
-        return { ...l, unit };
+        // Toggling the unit clears any override so it can't stick to the old base.
+        return { ...l, unit, overridePesewas: null };
       }),
+    })),
+
+  setOverride: (id, pesewas) =>
+    set((state) => ({
+      lines: state.lines.map((l) =>
+        l.id === id ? { ...l, overridePesewas: pesewas == null ? null : Math.max(0, Math.floor(pesewas)) } : l
+      ),
     })),
 
   remove: (id) => set((state) => ({ lines: state.lines.filter((l) => l.id !== id) })),
 
-  clear: () => set({ lines: [] }),
+  clear: () => set({ lines: [], discountPesewas: 0 }),
+
+  setDiscount: (pesewas) => set({ discountPesewas: Math.max(0, Math.floor(pesewas)) }),
 
   subtotal: () => get().lines.reduce((sum, l) => sum + lineTotal(l), 0),
+
+  total: () => Math.max(0, get().subtotal() - get().discountPesewas),
 
   itemCount: () => get().lines.reduce((sum, l) => sum + l.qty, 0),
 }));
