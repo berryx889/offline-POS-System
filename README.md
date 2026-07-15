@@ -76,6 +76,10 @@ Change these in Settings once that screen lands (Phase 3+).
 
 All seven phases are feature-complete. What's left is inherently on-device.
 
+**Beyond v1:** barcode-label printing (§6.3 v1.5) and **customer accounts & credit
+sales** (the §1 v2 item — customers with balances, a Credit tender that charges the
+account, repayments, and statements) are also built.
+
 ## Finish on the Windows machine
 
 These need the Rust toolchain and/or real hardware, so they're built-with-notes
