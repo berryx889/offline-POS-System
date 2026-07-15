@@ -9,11 +9,11 @@ import { native } from "@/native";
 import { piecesForUnit } from "@/stock";
 import { unitPrice, lineTotal, type CartLine } from "@/store/cartStore";
 
-export type PaymentMethod = "cash" | "momo" | "split";
+export type PaymentMethod = "cash" | "momo" | "split" | "credit";
 
 export interface PaymentInput {
   method: PaymentMethod;
-  amountPaidPesewas: number; // cash tendered (cash) or total (momo/split)
+  amountPaidPesewas: number; // cash tendered (cash), total (momo/split), or 0 (credit)
   cashPartPesewas?: number;
   momoPartPesewas?: number;
   momoReference?: string;
@@ -24,6 +24,8 @@ export interface CommitSaleInput {
   lines: CartLine[];
   payment: PaymentInput;
   discountPesewas?: number;
+  /** Required for credit sales — who owes the balance. */
+  customerId?: number;
 }
 
 export interface CommittedSale {
@@ -62,6 +64,9 @@ export interface SaleRow {
   cash_part_pesewas: number;
   momo_part_pesewas: number;
   momo_reference: string | null;
+  credit_pesewas: number;
+  customer_id: number | null;
+  customer_name: string | null;
   status: "completed" | "voided";
   created_at: string;
 }
@@ -83,9 +88,11 @@ const SELECT_SALE = `
   SELECT s.id, s.receipt_no, s.user_id, u.name AS cashier_name, s.subtotal_pesewas,
          s.discount_pesewas, s.total_pesewas, s.amount_paid_pesewas, s.change_pesewas,
          s.payment_method, s.cash_part_pesewas, s.momo_part_pesewas, s.momo_reference,
+         s.credit_pesewas, s.customer_id, cu.name AS customer_name,
          s.status, s.created_at
     FROM sales s
-    JOIN users u ON u.id = s.user_id`;
+    JOIN users u ON u.id = s.user_id
+    LEFT JOIN customers cu ON cu.id = s.customer_id`;
 
 export async function getSaleDetail(saleId: number): Promise<SaleDetail | null> {
   const [sale] = await native.select<SaleRow>(`${SELECT_SALE} WHERE s.id = ?`, [saleId]);
@@ -165,6 +172,11 @@ export async function voidSale(
         [it.product_id, it.pieces_deducted, saleId, voidedBy, now]
       );
     }
+    // Reverse any credit charge this sale put on a customer's account.
+    await native.execute(
+      "DELETE FROM customer_ledger WHERE sale_id = ? AND kind = 'charge'",
+      [saleId]
+    );
     await native.execute(
       "UPDATE sales SET status = 'voided', voided_by = ?, void_reason = ? WHERE id = ?",
       [voidedBy, reason, saleId]
@@ -207,6 +219,11 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
   const total = subtotal - discount;
   const change =
     payment.method === "cash" ? Math.max(0, payment.amountPaidPesewas - total) : 0;
+  // Credit: the unpaid portion charged to the customer's account.
+  const credit = payment.method === "credit" ? Math.max(0, total - payment.amountPaidPesewas) : 0;
+  if (payment.method === "credit" && input.customerId == null) {
+    throw new Error("A credit sale needs a customer");
+  }
   const now = new Date().toISOString();
 
   // Pieces needed per product (a customer may have box + loose lines of one item).
@@ -243,8 +260,9 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
       `INSERT INTO sales
         (receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas,
          amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas,
-         momo_part_pesewas, momo_reference, status, seq, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+         momo_part_pesewas, momo_reference, status, seq, created_at,
+         customer_id, credit_pesewas)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?)`,
       [
         receiptNo,
         userId,
@@ -259,9 +277,20 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
         payment.momoReference ?? null,
         saleSeq,
         now,
+        input.customerId ?? null,
+        credit,
       ]
     );
     const saleId = res.lastInsertId!;
+
+    // Credit sale → charge the customer's ledger inside the same transaction.
+    if (credit > 0) {
+      await native.execute(
+        `INSERT INTO customer_ledger (customer_id, kind, amount_pesewas, sale_id, user_id, created_at)
+         VALUES (?, 'charge', ?, ?, ?, ?)`,
+        [input.customerId, credit, saleId, userId, now]
+      );
+    }
 
     for (const l of lines) {
       const pieces = piecesForUnit(l.qty, l.unit, l.piecesPerBox);

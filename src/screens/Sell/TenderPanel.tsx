@@ -3,6 +3,7 @@
 // in brass — one of only two places that size is used.
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCart } from "@/store/cartStore";
 import { useSession } from "@/store/sessionStore";
 import {
@@ -11,6 +12,7 @@ import {
   type CommittedSale,
   type PaymentMethod,
 } from "@/db/queries/sales";
+import { listCustomers } from "@/db/queries/customers";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { toPesewas } from "@/money";
@@ -32,12 +34,14 @@ export function TenderPanel({
   const [received, setReceived] = useState(0); // cash, pesewas
   const [momoRef, setMomoRef] = useState("");
   const [cashPart, setCashPart] = useState(""); // split
+  const [customerId, setCustomerId] = useState<number | null>(null); // credit
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lines = useCart((s) => s.lines);
   const discountPesewas = useCart((s) => s.discountPesewas);
   const clear = useCart((s) => s.clear);
   const userId = useSession((s) => s.user?.id);
+  const { data: customers = [] } = useQuery({ queryKey: ["customers"], queryFn: () => listCustomers() });
 
   const change = received - totalPesewas;
   const splitCash = toPesewas(cashPart || "0");
@@ -45,7 +49,13 @@ export function TenderPanel({
 
   const canConfirm =
     !busy &&
-    (method === "cash" ? received >= totalPesewas : method === "momo" ? true : splitCash >= 0 && splitCash <= totalPesewas);
+    (method === "cash"
+      ? received >= totalPesewas
+      : method === "momo"
+        ? true
+        : method === "credit"
+          ? customerId != null
+          : splitCash >= 0 && splitCash <= totalPesewas);
 
   function pushDigit(d: string) {
     const cedis = Math.floor(received / 100);
@@ -63,13 +73,21 @@ export function TenderPanel({
           ? { method, amountPaidPesewas: received }
           : method === "momo"
             ? { method, amountPaidPesewas: totalPesewas, momoReference: momoRef.trim() || undefined }
-            : {
-                method,
-                amountPaidPesewas: totalPesewas,
-                cashPartPesewas: splitCash,
-                momoPartPesewas: splitMomo,
-              };
-      const sale = await commitSale({ userId, lines, payment, discountPesewas });
+            : method === "credit"
+              ? { method, amountPaidPesewas: 0 }
+              : {
+                  method,
+                  amountPaidPesewas: totalPesewas,
+                  cashPartPesewas: splitCash,
+                  momoPartPesewas: splitMomo,
+                };
+      const sale = await commitSale({
+        userId,
+        lines,
+        payment,
+        discountPesewas,
+        customerId: method === "credit" ? customerId! : undefined,
+      });
       emit("sale:completed", { saleId: sale.saleId });
       emit("stock:changed");
       clear();
@@ -101,7 +119,7 @@ export function TenderPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [received, canConfirm, userId, lines, method, cashPart, momoRef]);
+  }, [received, canConfirm, userId, lines, method, cashPart, momoRef, customerId]);
 
   return (
     <div className="absolute inset-0 z-10 flex flex-col bg-tape p-5">
@@ -113,8 +131,8 @@ export function TenderPanel({
       </div>
 
       {/* Method selector */}
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {(["cash", "momo", "split"] as PaymentMethod[]).map((m) => (
+      <div className="mt-4 grid grid-cols-4 gap-2">
+        {(["cash", "momo", "split", "credit"] as PaymentMethod[]).map((m) => (
           <button
             key={m}
             onClick={() => setMethod(m)}
@@ -192,6 +210,31 @@ export function TenderPanel({
             <span className="text-ink/60">MoMo part (rest)</span>
             <MoneyText pesewas={Math.max(0, splitMomo)} currency className="text-carbon" />
           </div>
+        </div>
+      )}
+
+      {method === "credit" && (
+        <div className="mt-6">
+          <label className="block">
+            <span className="mb-1 block text-sm text-ink/70">Charge to customer's account</span>
+            <select
+              value={customerId ?? ""}
+              onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+            >
+              <option value="">Select a customer…</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.balance_pesewas > 0 ? ` — owes ${(c.balance_pesewas / 100).toFixed(2)}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {customers.length === 0 && (
+            <p className="mt-2 text-xs text-ink/50">No customers yet. Add one in the Customers screen.</p>
+          )}
+          <p className="mt-2 text-xs text-ink/50">The full amount is added to their balance owed.</p>
         </div>
       )}
 

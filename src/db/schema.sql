@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS sales (
   total_pesewas         INTEGER NOT NULL,
   amount_paid_pesewas   INTEGER NOT NULL,
   change_pesewas        INTEGER NOT NULL DEFAULT 0,
-  payment_method        TEXT NOT NULL CHECK (payment_method IN ('cash', 'momo', 'split')),
+  payment_method        TEXT NOT NULL CHECK (payment_method IN ('cash', 'momo', 'split', 'credit')),
   cash_part_pesewas     INTEGER NOT NULL DEFAULT 0,
   momo_part_pesewas     INTEGER NOT NULL DEFAULT 0,
   momo_reference        TEXT,
@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS sales (
   voided_by             INTEGER REFERENCES users(id),
   void_reason           TEXT,
   seq                   INTEGER NOT NULL,               -- monotonic, clock-independent ordering
-  created_at            TEXT NOT NULL
+  created_at            TEXT NOT NULL,
+  customer_id           INTEGER REFERENCES customers(id),  -- credit sales (v2)
+  credit_pesewas        INTEGER NOT NULL DEFAULT 0          -- amount charged to the account
 );
 
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -96,6 +98,30 @@ CREATE TABLE IF NOT EXISTS sequences (
   value  INTEGER NOT NULL
 );
 
+-- Customers & credit (v2). A customer's balance owed is the running total of
+-- 'charge' rows (credit given at sale time) minus 'payment' rows (repayments).
+CREATE TABLE IF NOT EXISTS customers (
+  id                    INTEGER PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  phone                 TEXT,
+  note                  TEXT,
+  credit_limit_pesewas  INTEGER,                   -- null = no limit
+  active                INTEGER NOT NULL DEFAULT 1,
+  created_at            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS customer_ledger (
+  id             INTEGER PRIMARY KEY,
+  customer_id    INTEGER NOT NULL REFERENCES customers(id),
+  kind           TEXT NOT NULL CHECK (kind IN ('charge', 'payment')),
+  amount_pesewas INTEGER NOT NULL,                 -- always positive
+  sale_id        INTEGER REFERENCES sales(id),     -- set for 'charge' rows
+  method         TEXT,                             -- for 'payment' rows: cash/momo
+  note           TEXT,
+  user_id        INTEGER REFERENCES users(id),
+  created_at     TEXT NOT NULL
+);
+
 -- NOTE: Phase 2 adds an FTS5 virtual table (products_fts) for the manual search
 -- flow (<100ms on 10k rows). It is omitted here so the dev mock adapter runs on
 -- SQLite builds without the FTS5 extension.
@@ -106,3 +132,6 @@ CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(seq);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_stock_moves_product ON stock_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_customer ON customer_ledger(customer_id);
+-- idx_sales_customer is created in migrate.ts, after the v2 sales rebuild ensures
+-- the customer_id column exists on upgraded databases.

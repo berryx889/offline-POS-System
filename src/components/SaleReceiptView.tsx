@@ -44,6 +44,16 @@ export function SaleReceiptView({
           </div>
         )}
       </>
+    ) : sale.payment_method === "credit" ? (
+      <>
+        <Row label="ON CREDIT" pesewas={sale.credit_pesewas} />
+        {sale.customer_name && (
+          <div className="flex justify-between text-xs text-ink/60">
+            <span>Customer</span>
+            <span>{sale.customer_name}</span>
+          </div>
+        )}
+      </>
     ) : (
       <>
         <Row label="CASH" pesewas={sale.cash_part_pesewas} />

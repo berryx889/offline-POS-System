@@ -8,6 +8,7 @@ import { NavRail } from "@/components/NavRail";
 import { SellScreen } from "@/screens/Sell/SellScreen";
 import { ReprintsScreen } from "@/screens/Reprints/ReprintsScreen";
 import { ProductsScreen } from "@/screens/Products/ProductsScreen";
+import { CustomersScreen } from "@/screens/Customers/CustomersScreen";
 import { DashboardScreen } from "@/screens/Dashboard/DashboardScreen";
 import { EndOfDayScreen } from "@/screens/EndOfDay/EndOfDayScreen";
 import { ReportsScreen } from "@/screens/Reports/ReportsScreen";
@@ -27,6 +28,7 @@ export function App() {
           <Route path="/sell" element={<SellScreen />} />
           <Route path="/reprints" element={<ReprintsScreen />} />
           {isAdmin && <Route path="/products" element={<ProductsScreen />} />}
+          {isAdmin && <Route path="/customers" element={<CustomersScreen />} />}
           {isAdmin && <Route path="/dashboard" element={<DashboardScreen />} />}
           {isAdmin && <Route path="/end-of-day" element={<EndOfDayScreen />} />}
           {isAdmin && <Route path="/reports" element={<ReportsScreen />} />}

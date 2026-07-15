@@ -84,6 +84,9 @@ export function buildReceiptText(
   } else if (sale.payment_method === "momo") {
     lines.push(lr("MOMO", formatPesewas(sale.total_pesewas), width));
     if (sale.momo_reference) lines.push(`Ref: ${sale.momo_reference}`);
+  } else if (sale.payment_method === "credit") {
+    lines.push(lr("ON CREDIT", formatPesewas(sale.credit_pesewas), width));
+    if (sale.customer_name) lines.push(`Customer: ${sale.customer_name}`);
   } else {
     lines.push(lr("CASH", formatPesewas(sale.cash_part_pesewas), width));
     lines.push(lr("MOMO", formatPesewas(sale.momo_part_pesewas), width));

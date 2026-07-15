@@ -13,6 +13,7 @@ const ITEMS: Item[] = [
   { to: "/sell", label: "Sell", icon: "sell" },
   { to: "/reprints", label: "Reprints", icon: "reprints" },
   { to: "/products", label: "Products", icon: "products", adminOnly: true },
+  { to: "/customers", label: "Customers", icon: "customers", adminOnly: true },
   { to: "/dashboard", label: "Dashboard", icon: "dashboard", adminOnly: true },
   { to: "/end-of-day", label: "End day", icon: "endday", adminOnly: true },
   { to: "/reports", label: "Reports", icon: "reports", adminOnly: true },
