@@ -238,6 +238,25 @@ export async function updateProduct(
   }
 }
 
+/** Ensure a product has a scannable barcode (pos-prd.md §6.3 — shop-generated
+ *  codes for unlabeled goods). If it already has one, returns it; otherwise mints
+ *  a numeric shop code, saves it, and returns it so the printed label scans. */
+export async function ensureShopCode(productId: number): Promise<string> {
+  const [row] = await native.select<{ barcode: string | null }>(
+    "SELECT barcode FROM products WHERE id = ?",
+    [productId]
+  );
+  if (row?.barcode) return row.barcode;
+  // A stable, unique numeric code derived from the id (leading 2 = internal use).
+  const code = `2${String(productId).padStart(7, "0")}`;
+  await native.execute("UPDATE products SET barcode = ?, updated_at = ? WHERE id = ?", [
+    code,
+    new Date().toISOString(),
+    productId,
+  ]);
+  return code;
+}
+
 export async function productSalesCount(id: number): Promise<number> {
   const [row] = await native.select<{ n: number }>(
     "SELECT COUNT(*) AS n FROM sale_items WHERE product_id = ?",

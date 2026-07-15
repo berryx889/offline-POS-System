@@ -29,15 +29,16 @@ export function receiptHtml(text: string): string {
 <body><pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre></body></html>`;
 }
 
-/** Print an HTML receipt via a hidden iframe → the OS print dialog. */
-export function openHtmlReceipt(text: string): void {
+/** Print an arbitrary full HTML document via a hidden iframe → the OS print dialog.
+ *  Shared by receipts and the barcode-label sheet. */
+export function printHtmlDoc(html: string): void {
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
   document.body.appendChild(iframe);
   const doc = iframe.contentWindow?.document;
   if (!doc) return;
   doc.open();
-  doc.write(receiptHtml(text));
+  doc.write(html);
   doc.close();
   // Give the iframe a tick to lay out before printing.
   setTimeout(() => {
@@ -45,6 +46,11 @@ export function openHtmlReceipt(text: string): void {
     iframe.contentWindow?.print();
     setTimeout(() => iframe.remove(), 1000);
   }, 150);
+}
+
+/** Print an HTML receipt via the OS print dialog. */
+export function openHtmlReceipt(text: string): void {
+  printHtmlDoc(receiptHtml(text));
 }
 
 export async function printSale(

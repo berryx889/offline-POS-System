@@ -7,6 +7,7 @@ import { listProductsManage, listCategories, type Product } from "@/db/queries/p
 import { ProductDrawer } from "./ProductDrawer";
 import { RestockDialog } from "./RestockDialog";
 import { ImportDialog } from "./ImportDialog";
+import { LabelDialog } from "./LabelDialog";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
@@ -21,6 +22,7 @@ export function ProductsScreen() {
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [restockTarget, setRestockTarget] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [labeling, setLabeling] = useState(false);
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
   const { data: products = [], isLoading } = useQuery({
@@ -39,6 +41,12 @@ export function ProductsScreen() {
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-sans text-xl font-semibold text-ink">Products</h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setLabeling(true)}
+            className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+          >
+            Print labels
+          </button>
           <button
             onClick={() => setImporting(true)}
             className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
@@ -160,6 +168,7 @@ export function ProductsScreen() {
         <RestockDialog product={restockTarget} onClose={() => setRestockTarget(null)} />
       )}
       {importing && <ImportDialog onClose={() => setImporting(false)} />}
+      {labeling && <LabelDialog onClose={() => setLabeling(false)} />}
     </div>
   );
 }
