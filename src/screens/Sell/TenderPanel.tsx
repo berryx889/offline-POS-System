@@ -13,9 +13,11 @@ import {
   type PaymentMethod,
 } from "@/db/queries/sales";
 import { listCustomers } from "@/db/queries/customers";
+import { logAudit } from "@/db/queries/audit";
 import { MoneyText } from "@/components/MoneyText";
+import { AdminPinPrompt } from "@/components/AdminPinPrompt";
 import { formatStock } from "@/stock";
-import { toPesewas } from "@/money";
+import { toPesewas, formatGHS } from "@/money";
 import { emit } from "@/lib/events";
 import { cn } from "@/lib/cn";
 
@@ -35,6 +37,8 @@ export function TenderPanel({
   const [momoRef, setMomoRef] = useState("");
   const [cashPart, setCashPart] = useState(""); // split
   const [customerId, setCustomerId] = useState<number | null>(null); // credit
+  const [limitOverride, setLimitOverride] = useState(false); // admin approved over-limit
+  const [askLimitPin, setAskLimitPin] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lines = useCart((s) => s.lines);
@@ -46,6 +50,12 @@ export function TenderPanel({
   const change = received - totalPesewas;
   const splitCash = toPesewas(cashPart || "0");
   const splitMomo = totalPesewas - splitCash;
+
+  // Credit-limit check: would this sale push the customer past their limit?
+  const customer = customers.find((c) => c.id === customerId) ?? null;
+  const projectedBalance = customer ? customer.balance_pesewas + totalPesewas : 0;
+  const overLimit =
+    customer?.credit_limit_pesewas != null && projectedBalance > customer.credit_limit_pesewas;
 
   const canConfirm =
     !busy &&
@@ -63,8 +73,13 @@ export function TenderPanel({
     if (next <= 9_999_999) setReceived(next * 100);
   }
 
-  async function confirm() {
+  async function confirm(overrideAdminId?: number) {
     if (!canConfirm || userId == null) return;
+    // Over a customer's credit limit → needs a manager, unless already authorized.
+    if (method === "credit" && overLimit && !limitOverride && overrideAdminId == null) {
+      setAskLimitPin(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -88,6 +103,14 @@ export function TenderPanel({
         discountPesewas,
         customerId: method === "credit" ? customerId! : undefined,
       });
+      if (method === "credit" && overLimit) {
+        logAudit(overrideAdminId ?? userId, "credit_limit_override", {
+          customer_id: customerId,
+          limit: customer?.credit_limit_pesewas,
+          projected_balance: projectedBalance,
+          sale_id: sale.saleId,
+        });
+      }
       emit("sale:completed", { saleId: sale.saleId });
       emit("stock:changed");
       clear();
@@ -234,6 +257,16 @@ export function TenderPanel({
           {customers.length === 0 && (
             <p className="mt-2 text-xs text-ink/50">No customers yet. Add one in the Customers screen.</p>
           )}
+          {overLimit && (
+            <div className="mt-3 rounded-lg border border-stamp/30 bg-stamp/5 px-3 py-2 text-sm">
+              <span className="font-medium text-stamp">Over credit limit.</span>{" "}
+              <span className="text-ink/60">
+                This would put {customer?.name} at {formatGHS(projectedBalance)}, above their{" "}
+                {formatGHS(customer!.credit_limit_pesewas!)} limit.
+                {limitOverride ? " Manager approved." : " A manager must approve."}
+              </span>
+            </div>
+          )}
           <p className="mt-2 text-xs text-ink/50">The full amount is added to their balance owed.</p>
         </div>
       )}
@@ -247,16 +280,29 @@ export function TenderPanel({
         )}
         {error && <p className="mb-3 text-sm font-medium text-stamp">{error}</p>}
         <button
-          onClick={confirm}
+          onClick={() => confirm()}
           disabled={!canConfirm}
           className={cn(
             "h-16 w-full rounded-xl bg-ledger text-lg font-semibold text-tape shadow-card",
             "transition-colors hover:bg-ledger-deep disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-carbon"
           )}
         >
-          {busy ? "Saving…" : "Confirm payment"}
+          {busy ? "Saving…" : method === "credit" ? "Charge to account" : "Confirm payment"}
         </button>
       </div>
+
+      {askLimitPin && (
+        <AdminPinPrompt
+          title="Over credit limit"
+          detail={`${customer?.name} would exceed their ${formatGHS(customer!.credit_limit_pesewas!)} limit.`}
+          onVerified={(admin) => {
+            setLimitOverride(true);
+            setAskLimitPin(false);
+            confirm(admin.id);
+          }}
+          onCancel={() => setAskLimitPin(false)}
+        />
+      )}
     </div>
   );
 }
