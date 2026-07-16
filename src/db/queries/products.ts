@@ -110,13 +110,71 @@ export async function searchProducts(term: string, limit = 20): Promise<Product[
   );
 }
 
-/** Exact barcode lookup for the scan fast-path. Returns null if unregistered. */
+/** Exact barcode lookup for the scan fast-path. Checks the variant's own barcode
+ *  first, then its aliases (suppliers change manufacturer codes — §v3.6).
+ *  Returns null if unregistered. */
 export async function findByBarcode(barcode: string): Promise<Product | null> {
   const rows = await native.select<Product>(
     `${SELECT_PRODUCT} WHERE p.active = 1 AND p.barcode = ? LIMIT 1`,
     [barcode]
   );
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+  const viaAlias = await native.select<Product>(
+    `${SELECT_PRODUCT}
+      JOIN barcode_aliases a ON a.product_id = p.id
+     WHERE p.active = 1 AND a.barcode = ? LIMIT 1`,
+    [barcode]
+  );
+  return viaAlias[0] ?? null;
+}
+
+// ---- Barcode aliases --------------------------------------------------------
+
+export interface BarcodeAlias {
+  id: number;
+  barcode: string;
+}
+
+export async function listAliases(productId: number): Promise<BarcodeAlias[]> {
+  return native.select<BarcodeAlias>(
+    "SELECT id, barcode FROM barcode_aliases WHERE product_id = ? ORDER BY id",
+    [productId]
+  );
+}
+
+/** Add an extra barcode that resolves to this variant. Rejects codes already in
+ *  use anywhere (a barcode must identify exactly one variant). */
+export async function addAlias(productId: number, barcode: string, userId: number): Promise<void> {
+  const code = barcode.trim();
+  if (!code) throw new Error("Barcode is empty.");
+  const [owner] = await native.select<{ name: string }>(
+    `SELECT name FROM products WHERE barcode = ?
+     UNION
+     SELECT p.name FROM barcode_aliases a JOIN products p ON p.id = a.product_id
+      WHERE a.barcode = ?
+     LIMIT 1`,
+    [code, code]
+  );
+  if (owner) throw new Error(`That barcode already belongs to ${owner.name}.`);
+  await native.execute(
+    "INSERT INTO barcode_aliases (product_id, barcode, created_at) VALUES (?, ?, ?)",
+    [productId, code, new Date().toISOString()]
+  );
+  await logAudit(userId, "barcode_alias_add", { product_id: productId, barcode: code });
+}
+
+export async function removeAlias(aliasId: number, userId: number): Promise<void> {
+  const [row] = await native.select<{ product_id: number; barcode: string }>(
+    "SELECT product_id, barcode FROM barcode_aliases WHERE id = ?",
+    [aliasId]
+  );
+  await native.execute("DELETE FROM barcode_aliases WHERE id = ?", [aliasId]);
+  if (row) {
+    await logAudit(userId, "barcode_alias_remove", {
+      product_id: row.product_id,
+      barcode: row.barcode,
+    });
+  }
 }
 
 /** The most-sold products for the quick grid, padded with recent products so a
@@ -357,6 +415,8 @@ export async function deleteProduct(id: number, userId: number): Promise<void> {
   await native.execute("BEGIN IMMEDIATE");
   try {
     await native.execute("DELETE FROM stock_movements WHERE product_id = ?", [id]);
+    await native.execute("DELETE FROM barcode_aliases WHERE product_id = ?", [id]);
+    await native.execute("DELETE FROM selling_units WHERE product_id = ?", [id]);
     await native.execute("DELETE FROM products WHERE id = ?", [id]);
     await native.execute("COMMIT");
   } catch (e) {

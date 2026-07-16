@@ -15,6 +15,10 @@ import {
   setProductActive,
   deleteProduct,
   productSalesCount,
+  ensureShopCode,
+  listAliases,
+  addAlias,
+  removeAlias,
   type Product,
   type ProductInput,
 } from "@/db/queries/products";
@@ -267,18 +271,32 @@ export function ProductDrawer({
               <In value={sku} onChange={setSku} placeholder="optional" />
             </L>
             <L label="Barcode">
-              <input
-                ref={barcodeRef}
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.preventDefault(); // scanner Enter must not submit
-                }}
-                placeholder="Scan or type"
-                className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
-              />
+              <div className="flex gap-1">
+                <input
+                  ref={barcodeRef}
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.preventDefault(); // scanner Enter must not submit
+                  }}
+                  placeholder="Scan or type"
+                  className="w-full min-w-0 rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+                />
+                {isEdit && !barcode.trim() && (
+                  <button
+                    type="button"
+                    onClick={async () => setBarcode(await ensureShopCode(product!.id))}
+                    title="Mint an internal shop code for unlabeled goods, then print it from Labels"
+                    className="shrink-0 rounded-lg border border-ledger px-2 text-xs font-medium text-ledger hover:bg-ledger/5"
+                  >
+                    Generate
+                  </button>
+                )}
+              </div>
             </L>
           </div>
+
+          {isEdit && <AliasEditor productId={product!.id} userId={userId} />}
 
           <L label="Description">
             <textarea
@@ -393,6 +411,81 @@ export function ProductDrawer({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Extra barcodes that resolve to this variant (v3 §6 — suppliers change codes).
+ *  Add by scanning into the input; each alias removes individually. */
+function AliasEditor({ productId, userId }: { productId: number; userId: number }) {
+  const queryClient = useQueryClient();
+  const { data: aliases = [] } = useQuery({
+    queryKey: ["aliases", productId],
+    queryFn: () => listAliases(productId),
+  });
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    setError(null);
+    try {
+      await addAlias(productId, code, userId);
+      setCode("");
+      queryClient.invalidateQueries({ queryKey: ["aliases", productId] });
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-tape px-3 py-2">
+      <span className="block text-sm text-ink/70">Barcode aliases</span>
+      <p className="mt-0.5 text-xs text-ink/40">
+        Other codes that load this product (e.g. a supplier's changed barcode).
+      </p>
+      {aliases.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {aliases.map((a) => (
+            <li key={a.id} className="flex items-center justify-between text-sm">
+              <span className="font-mono text-ink/80">{a.barcode}</span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await removeAlias(a.id, userId);
+                  queryClient.invalidateQueries({ queryKey: ["aliases", productId] });
+                }}
+                className="text-ink/30 hover:text-stamp"
+                aria-label={`Remove alias ${a.barcode}`}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 flex gap-2">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault(); // scanner Enter adds instead of submitting
+              add();
+            }
+          }}
+          placeholder="Scan or type another code"
+          className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-tape px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+        />
+        <button
+          type="button"
+          onClick={add}
+          disabled={!code.trim()}
+          className="shrink-0 rounded-lg border border-ledger px-3 text-xs font-medium text-ledger hover:bg-ledger/5 disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs font-medium text-stamp">{error}</p>}
     </div>
   );
 }
