@@ -69,11 +69,11 @@ Screens compose components and call queries/stores; they hold no platform calls 
 Replicate the design spec in `pos-prd.md §9` exactly: the ledger-green identity, the live receipt-tape cart, tabular numerals on every money figure, light theme only, touch targets ≥ 48 px (primary ≥ 56 px). Do not approximate spacing, color, or type. The 48 px money size is reserved for exactly two moments: **change due** and **today's revenue**.
 
 ## Styling Rules
-Tailwind first, using the design tokens (below / in `tailwind.config` + `styles/tokens.css`). Fall back to inline style only for dynamic runtime values (e.g. SVG bar heights, animated slide offsets) and CSS clip-path perforations. Reuse patterns via small components, not copy-paste. No gradients. Elevation = 1px ink-8% border + soft shadow.
+Tailwind first, using the design tokens (below / in `tailwind.config` + `styles/tokens.css`). Fall back to inline style only for dynamic runtime values (e.g. SVG bar heights, animated slide offsets) and CSS clip-path perforations. Reuse patterns via small components, not copy-paste. No gradients. Clean & consistent (SiMi Shop direction): white surfaces, soft diffuse `shadow-card` (no hard borders needed), generous rounding (`rounded-2xl` for cards), roomy whitespace.
 
 ### Design tokens
-`paper #F4F6F5` bg · `ledger #0E5A45` primary · `ledger-deep #093F30` hover · `ink #1C2522` text · `tape #FFFFFF` cart/receipt · `carbon #3A5FA8` info/focus · `stamp #C0392B` danger/alerts · `brass #B98A2F` money accent.
-Type scale: 13 / 15 / 18 / 24 / 34 / 48. UI+headings = Archivo (600 headings); money + receipt tape = IBM Plex Mono; tables = Archivo with `tabular-nums`.
+`paper #F1F6F2` bg · `ledger #27A567` primary (fresh grocery green — fills, active nav, accents) · `ledger-deep #1E8A54` hover · `leaf #E9F6EE` light tint (hovers, selected rows, active-nav bg) · `ink #1C2522` text · `tape #FFFFFF` surfaces/cart/receipt · `carbon #3A5FA8` info/focus · `stamp #E0503A` danger/alerts · `brass #B98A2F` money accent (change due, today's revenue).
+Sidebar is white with the active item as a solid `ledger` pill. Cards: `rounded-2xl bg-tape shadow-card`. Type scale: 13 / 15 / 18 / 24 / 34 / 48. UI+headings = Archivo (600 headings); money + receipt tape = IBM Plex Mono; tables = Archivo with `tabular-nums`.
 
 ## State Management
 Zustand for global client state: `cartStore` (lines, unit, qty, discount, totals) and `sessionStore` (current user, role). TanStack Query for all SQLite reads (keyed, invalidated on the `sale:completed` event). Local component state for transient UI. The in-app event bus in `lib/events.ts` is the "live" mechanism — no server, no websockets.

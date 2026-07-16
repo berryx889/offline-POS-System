@@ -6,13 +6,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        paper: "#F4F6F5",
-        ledger: "#0E5A45",
-        "ledger-deep": "#093F30",
+        // Fresher grocery-green direction (SiMi Shop reference), kept readable in
+        // bright shop lighting. `ledger` is the primary fill/accent; `leaf` is the
+        // light tint for hovers, selected rows, and active-nav backgrounds.
+        paper: "#F1F6F2",
+        ledger: "#27A567",
+        "ledger-deep": "#1E8A54",
+        leaf: "#E9F6EE",
         ink: "#1C2522",
         tape: "#FFFFFF",
         carbon: "#3A5FA8",
-        stamp: "#C0392B",
+        stamp: "#E0503A",
         brass: "#B98A2F",
       },
       fontFamily: {
@@ -31,8 +35,13 @@ export default {
         "3xl": ["48px", "52px"],
       },
       boxShadow: {
-        // Elevation = 1px ink-8% border + a soft shadow, nothing heavier.
-        card: "0 1px 3px rgba(28,37,34,0.08), 0 1px 2px rgba(28,37,34,0.06)",
+        // Soft, diffuse card elevation (SiMi Shop reference) — no hard 1px line.
+        card: "0 6px 20px -6px rgba(20,60,40,0.10), 0 2px 6px -2px rgba(20,60,40,0.06)",
+        soft: "0 2px 10px -2px rgba(20,60,40,0.08)",
+      },
+      borderRadius: {
+        "2xl": "1rem",
+        "3xl": "1.25rem",
       },
     },
   },

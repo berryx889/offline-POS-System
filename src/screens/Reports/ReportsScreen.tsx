@@ -118,7 +118,7 @@ export function ReportsScreen() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-auto rounded-xl border border-ink/10 bg-tape shadow-card">
+      <div className="flex-1 overflow-auto rounded-2xl border border-ink/8 bg-tape shadow-card">
         {tab === "product" && (
           <Table headers={["Product", "Qty", "Revenue", "Profit"]} rows={byProduct.map((r) => [r.product_name, r.qty, <MoneyText pesewas={r.revenue} />, <MoneyText pesewas={r.profit} />])} />
         )}

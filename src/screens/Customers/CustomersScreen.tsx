@@ -54,7 +54,7 @@ export function CustomersScreen() {
           <MoneyText pesewas={outstanding} size="xl" currency className={cn("font-semibold", outstanding > 0 ? "text-stamp" : "text-ledger")} />
         </div>
 
-        <div className="flex-1 overflow-auto rounded-xl border border-ink/10 bg-tape shadow-card">
+        <div className="flex-1 overflow-auto rounded-2xl border border-ink/8 bg-tape shadow-card">
           <table className="w-full text-left text-sm tabular-nums">
             <thead className="sticky top-0 border-b border-ink/10 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
               <tr>
