@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { restockProduct, type Product } from "@/db/queries/products";
+import { recordStockChange, type Product } from "@/db/queries/products";
 import { useSession } from "@/store/sessionStore";
 import { formatStock, piecesForUnit } from "@/stock";
 import { emit } from "@/lib/events";
@@ -32,7 +32,7 @@ export function RestockDialog({ product, onClose }: { product: Product; onClose:
     if (resulting < 0) return setError("That would leave negative stock.");
     setBusy(true);
     try {
-      await restockProduct(product.id, change, reason, userId);
+      await recordStockChange(product.id, change, reason, userId);
       queryClient.invalidateQueries({ queryKey: ["products-manage"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["top-products"] });

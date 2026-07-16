@@ -3,6 +3,7 @@
 
 import { native } from "@/native";
 import { logAudit } from "./audit";
+import { applyStockMovement, type MovementReason } from "./movements";
 import { isFtsReady, toFtsQuery } from "../fts";
 
 export interface Product {
@@ -181,10 +182,14 @@ export async function createProduct(
     );
     const id = res.lastInsertId!;
     if (openingStockPieces !== 0) {
+      // The insert above already set stock_pieces; record where it came from
+      // without double-counting by writing the movement against a 0 baseline.
       await native.execute(
-        `INSERT INTO stock_movements (product_id, change_pieces, reason, reference_id, user_id, created_at)
-         VALUES (?, ?, 'adjustment', NULL, ?, ?)`,
-        [id, openingStockPieces, userId, now]
+        `INSERT INTO stock_movements
+          (product_id, change_pieces, reason, reference_id, note, prev_pieces, new_pieces,
+           user_id, created_at)
+         VALUES (?, ?, 'opening', NULL, NULL, 0, ?, ?, ?)`,
+        [id, openingStockPieces, openingStockPieces, userId, now]
       );
     }
     await native.execute("COMMIT");
@@ -293,27 +298,19 @@ export async function deleteProduct(id: number, userId: number): Promise<void> {
   await logAudit(userId, "product_delete", { product_id: id });
 }
 
-/** Restock: add (or correct) stock via a movement, never a raw field edit
- *  (pos-prd.md §6.3). Positive change adds; reason distinguishes restock vs count
- *  adjustment. */
-export async function restockProduct(
+/** Record a stock movement (restock, purchase, damage, count adjustment...) —
+ *  never a raw field edit (pos-prd.md §6.3, v3 §11). Positive change adds stock,
+ *  negative removes it; prev/new stock are captured on the movement row. */
+export async function recordStockChange(
   id: number,
   changePieces: number,
-  reason: "restock" | "adjustment",
-  userId: number
+  reason: MovementReason,
+  userId: number,
+  note?: string
 ): Promise<void> {
-  const now = new Date().toISOString();
   await native.execute("BEGIN IMMEDIATE");
   try {
-    await native.execute(
-      "UPDATE products SET stock_pieces = stock_pieces + ?, updated_at = ? WHERE id = ?",
-      [changePieces, now, id]
-    );
-    await native.execute(
-      `INSERT INTO stock_movements (product_id, change_pieces, reason, reference_id, user_id, created_at)
-       VALUES (?, ?, ?, NULL, ?, ?)`,
-      [id, changePieces, reason, userId, now]
-    );
+    await applyStockMovement({ productId: id, changePieces, reason, userId, note });
     await native.execute("COMMIT");
   } catch (e) {
     await native.execute("ROLLBACK");

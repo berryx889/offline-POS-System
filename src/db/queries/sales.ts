@@ -8,6 +8,7 @@
 import { native } from "@/native";
 import { piecesForUnit } from "@/stock";
 import { unitPrice, lineTotal, type CartLine } from "@/store/cartStore";
+import { applyStockMovement } from "./movements";
 
 export type PaymentMethod = "cash" | "momo" | "split" | "credit";
 
@@ -162,15 +163,14 @@ export async function voidSale(
       [saleId]
     );
     for (const it of items) {
-      await native.execute(
-        "UPDATE products SET stock_pieces = stock_pieces + ?, updated_at = ? WHERE id = ?",
-        [it.pieces_deducted, now, it.product_id]
-      );
-      await native.execute(
-        `INSERT INTO stock_movements (product_id, change_pieces, reason, reference_id, user_id, created_at)
-         VALUES (?, ?, 'void', ?, ?, ?)`,
-        [it.product_id, it.pieces_deducted, saleId, voidedBy, now]
-      );
+      await applyStockMovement({
+        productId: it.product_id,
+        changePieces: it.pieces_deducted,
+        reason: "void",
+        referenceId: saleId,
+        userId: voidedBy,
+        now,
+      });
     }
     // Reverse any credit charge this sale put on a customer's account.
     await native.execute(
@@ -301,16 +301,14 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [saleId, l.productId, l.name, l.unit, l.qty, unitPrice(l), lineTotal(l), pieces]
       );
-      await native.execute(
-        "UPDATE products SET stock_pieces = stock_pieces - ?, updated_at = ? WHERE id = ?",
-        [pieces, now, l.productId]
-      );
-      await native.execute(
-        `INSERT INTO stock_movements
-          (product_id, change_pieces, reason, reference_id, user_id, created_at)
-         VALUES (?, ?, 'sale', ?, ?, ?)`,
-        [l.productId, -pieces, saleId, userId, now]
-      );
+      await applyStockMovement({
+        productId: l.productId,
+        changePieces: -pieces,
+        reason: "sale",
+        referenceId: saleId,
+        userId,
+        now,
+      });
     }
 
     await native.execute("COMMIT");

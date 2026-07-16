@@ -19,20 +19,53 @@ CREATE TABLE IF NOT EXISTS categories (
   name  TEXT UNIQUE NOT NULL
 );
 
+-- Each row is a sellable VARIANT ("Milo 400g Tin"). Variants of one product share
+-- a `family` name ("Milo") — that's the product level of the v3 data model. Every
+-- variant has its own barcode, prices, and stock.
 CREATE TABLE IF NOT EXISTS products (
   id                       INTEGER PRIMARY KEY,
   name                     TEXT NOT NULL,
   barcode                  TEXT UNIQUE,                 -- nullable: not every item has one
+  sku                      TEXT,
+  family                   TEXT,                        -- product family; null = standalone
+  brand                    TEXT,
+  supplier                 TEXT,
+  description              TEXT,
+  image                    TEXT,                        -- small data-URL thumbnail
   category_id              INTEGER REFERENCES categories(id),
   pieces_per_box           INTEGER NOT NULL DEFAULT 1,  -- 1 for loose items
   retail_price_pesewas     INTEGER NOT NULL,            -- price per PIECE
   wholesale_price_pesewas  INTEGER,                     -- price per BOX (null = retail only)
+  promo_price_pesewas      INTEGER,                     -- per piece; overrides retail while set
+  bulk_price_pesewas       INTEGER,                     -- per-piece wholesale (bulk buys)
+  bulk_min_qty             INTEGER,                     -- piece qty where bulk price kicks in
   cost_price_pesewas       INTEGER,                     -- per piece, admin-only
   stock_pieces             INTEGER NOT NULL DEFAULT 0,  -- ALL stock tracked in pieces
-  low_stock_threshold      INTEGER NOT NULL DEFAULT 10,
+  low_stock_threshold      INTEGER NOT NULL DEFAULT 10, -- reorder level
+  expiry_date              TEXT,                        -- ISO date, optional
+  batch_number             TEXT,
   active                   INTEGER NOT NULL DEFAULT 1,
   created_at               TEXT NOT NULL,
   updated_at               TEXT NOT NULL
+);
+
+-- Extra barcodes that resolve to the same variant (suppliers change codes).
+CREATE TABLE IF NOT EXISTS barcode_aliases (
+  id          INTEGER PRIMARY KEY,
+  product_id  INTEGER NOT NULL REFERENCES products(id),
+  barcode     TEXT UNIQUE NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+-- Custom selling units beyond the built-in PC/BOX ("Half Tray", "Crate", "5kg").
+-- Each has its own price; `pieces` is the stock deducted per unit sold.
+CREATE TABLE IF NOT EXISTS selling_units (
+  id            INTEGER PRIMARY KEY,
+  product_id    INTEGER NOT NULL REFERENCES products(id),
+  name          TEXT NOT NULL,
+  pieces        INTEGER NOT NULL,
+  price_pesewas INTEGER NOT NULL,
+  sort          INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sales (
@@ -54,7 +87,9 @@ CREATE TABLE IF NOT EXISTS sales (
   seq                   INTEGER NOT NULL,               -- monotonic, clock-independent ordering
   created_at            TEXT NOT NULL,
   customer_id           INTEGER REFERENCES customers(id),  -- credit sales (v2)
-  credit_pesewas        INTEGER NOT NULL DEFAULT 0          -- amount charged to the account
+  credit_pesewas        INTEGER NOT NULL DEFAULT 0,         -- amount charged to the account
+  tax_pesewas           INTEGER NOT NULL DEFAULT 0,         -- added on top of total (v3)
+  note                  TEXT                                -- optional cashier note (v3)
 );
 
 CREATE TABLE IF NOT EXISTS sale_items (
@@ -62,21 +97,35 @@ CREATE TABLE IF NOT EXISTS sale_items (
   sale_id             INTEGER NOT NULL REFERENCES sales(id),
   product_id          INTEGER NOT NULL REFERENCES products(id),
   product_name        TEXT NOT NULL,                    -- snapshot at sale time
-  unit                TEXT NOT NULL CHECK (unit IN ('piece', 'box')),
+  unit                TEXT NOT NULL,                    -- 'piece', 'box', or a custom unit name
   qty                 INTEGER NOT NULL,
   unit_price_pesewas  INTEGER NOT NULL,                 -- snapshot at sale time
   line_total_pesewas  INTEGER NOT NULL,
-  pieces_deducted     INTEGER NOT NULL                  -- qty × (box ? pieces_per_box : 1)
+  pieces_deducted     INTEGER NOT NULL                  -- qty × pieces-per-unit
 );
 
 CREATE TABLE IF NOT EXISTS stock_movements (
   id            INTEGER PRIMARY KEY,
   product_id    INTEGER NOT NULL REFERENCES products(id),
-  change_pieces INTEGER NOT NULL,                       -- negative sale, positive restock/void
-  reason        TEXT NOT NULL CHECK (reason IN ('sale', 'void', 'restock', 'adjustment')),
+  change_pieces INTEGER NOT NULL,                       -- negative out, positive in
+  reason        TEXT NOT NULL CHECK (reason IN
+                  ('sale', 'void', 'restock', 'adjustment', 'purchase', 'return',
+                   'damaged', 'expired', 'transfer', 'opening')),
   reference_id  INTEGER,                                -- sale id when applicable
+  note          TEXT,                                   -- free-text reason detail (v3)
+  prev_pieces   INTEGER,                                -- stock before (v3; null on old rows)
+  new_pieces    INTEGER,                                -- stock after  (v3; null on old rows)
   user_id       INTEGER NOT NULL REFERENCES users(id),
   created_at    TEXT NOT NULL
+);
+
+-- Parked carts the cashier can resume (v3 hold/resume).
+CREATE TABLE IF NOT EXISTS held_sales (
+  id          INTEGER PRIMARY KEY,
+  label       TEXT,
+  cart_json   TEXT NOT NULL,
+  user_id     INTEGER NOT NULL REFERENCES users(id),
+  created_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -106,6 +155,7 @@ CREATE TABLE IF NOT EXISTS customers (
   phone                 TEXT,
   note                  TEXT,
   credit_limit_pesewas  INTEGER,                   -- null = no limit
+  customer_type         TEXT NOT NULL DEFAULT 'retail',  -- 'retail' | 'wholesale' (v3)
   active                INTEGER NOT NULL DEFAULT 1,
   created_at            TEXT NOT NULL
 );
@@ -128,6 +178,10 @@ CREATE TABLE IF NOT EXISTS customer_ledger (
 
 CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
+-- idx_products_family is created in migrate.ts, after the v3 column adds ensure
+-- the column exists on upgraded databases.
+CREATE INDEX IF NOT EXISTS idx_aliases_product ON barcode_aliases(product_id);
+CREATE INDEX IF NOT EXISTS idx_units_product ON selling_units(product_id);
 CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(seq);
 CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
