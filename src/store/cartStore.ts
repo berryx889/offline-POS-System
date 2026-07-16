@@ -18,6 +18,14 @@ export interface CartLine {
   piecesPerBox: number;
   retailPesewas: number;
   wholesalePesewas: number | null; // per BOX
+  /** Per-piece promo price (overrides retail while set). */
+  promoPesewas: number | null;
+  /** Per-piece wholesale price + the piece qty where it kicks in automatically. */
+  bulkPesewas: number | null;
+  bulkMinQty: number | null;
+  /** Wholesale-pricing sale (customer type or cashier toggle): bulk price applies
+   *  regardless of quantity. Carried per line so pricing stays a pure function. */
+  wholesale: boolean;
   /** Custom selling units available for this product (hydrated async after add). */
   extraUnits: SellingUnit[];
   unit: Unit;
@@ -31,11 +39,31 @@ export interface CartLine {
   overridePesewas?: number | null;
 }
 
-/** Effective unit price: an admin override wins; 'piece' uses retail; box/custom
- *  use their snapshotted price (falling back to retail defensively). */
+/** Why a piece price came out the way it did — the UI shows a small tag. */
+export type PieceRate = "retail" | "promo" | "wholesale";
+
+/** Smart pricing for the piece unit (v3 §9): the per-piece wholesale price applies
+ *  on a wholesale sale or once qty reaches the threshold; else promo beats retail. */
+export function pieceRate(line: CartLine): PieceRate {
+  if (
+    line.bulkPesewas != null &&
+    (line.wholesale || (line.bulkMinQty != null && line.qty >= line.bulkMinQty))
+  ) {
+    return "wholesale";
+  }
+  return line.promoPesewas != null ? "promo" : "retail";
+}
+
+/** Effective unit price: an admin override wins; 'piece' uses smart pricing;
+ *  box/custom use their snapshotted price (falling back to retail defensively). */
 export function unitPrice(line: CartLine): number {
   if (line.overridePesewas != null) return line.overridePesewas;
-  if (line.unit === "piece") return line.retailPesewas;
+  if (line.unit === "piece") {
+    const rate = pieceRate(line);
+    if (rate === "wholesale") return line.bulkPesewas!;
+    if (rate === "promo") return line.promoPesewas!;
+    return line.retailPesewas;
+  }
   return line.unitPricePesewas ?? line.retailPesewas;
 }
 
@@ -62,7 +90,7 @@ export function availableUnits(line: CartLine): { name: Unit; pieces: number; pr
   return units;
 }
 
-function toLine(p: Product, unit: Unit): CartLine {
+function toLine(p: Product, unit: Unit, wholesale: boolean): CartLine {
   const base: CartLine = {
     id: crypto.randomUUID(),
     productId: p.id,
@@ -70,6 +98,10 @@ function toLine(p: Product, unit: Unit): CartLine {
     piecesPerBox: p.pieces_per_box,
     retailPesewas: p.retail_price_pesewas,
     wholesalePesewas: p.wholesale_price_pesewas,
+    promoPesewas: p.promo_price_pesewas,
+    bulkPesewas: p.bulk_price_pesewas,
+    bulkMinQty: p.bulk_min_qty,
+    wholesale,
     extraUnits: [],
     unit: "piece",
     unitPieces: 1,
@@ -86,6 +118,10 @@ function toLine(p: Product, unit: Unit): CartLine {
 
 interface CartState {
   lines: CartLine[];
+  /** Wholesale-pricing sale (v3 §9 method 3). Set by the cashier toggle or by
+   *  attaching a wholesale customer at tender; applied to every line. */
+  wholesaleMode: boolean;
+  setWholesaleMode: (on: boolean) => void;
   /** The line last added/incremented, plus a tick that changes on every add so the
    *  UI can re-trigger the scan-success flash even when the same line is hit again. */
   lastTouchedId: string | null;
@@ -130,6 +166,13 @@ export const useCart = create<CartState>((set, get) => ({
   lastTouchedId: null,
   touchTick: 0,
   discountPesewas: 0,
+  wholesaleMode: false,
+
+  setWholesaleMode: (on) =>
+    set((state) => ({
+      wholesaleMode: on,
+      lines: state.lines.map((l) => ({ ...l, wholesale: on })),
+    })),
 
   add: (product, unit = "piece") =>
     set((state) => {
@@ -148,7 +191,7 @@ export const useCart = create<CartState>((set, get) => ({
           touchTick: state.touchTick + 1,
         };
       }
-      const line = toLine(product, unit);
+      const line = toLine(product, unit, state.wholesaleMode);
       return {
         lines: [...state.lines, line],
         lastTouchedId: line.id,
@@ -198,7 +241,7 @@ export const useCart = create<CartState>((set, get) => ({
 
   remove: (id) => set((state) => ({ lines: state.lines.filter((l) => l.id !== id) })),
 
-  clear: () => set({ lines: [], discountPesewas: 0 }),
+  clear: () => set({ lines: [], discountPesewas: 0, wholesaleMode: false }),
 
   setDiscount: (pesewas) => set({ discountPesewas: Math.max(0, Math.floor(pesewas)) }),
 

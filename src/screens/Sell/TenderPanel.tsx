@@ -37,6 +37,7 @@ export function TenderPanel({
   const [momoRef, setMomoRef] = useState("");
   const [cashPart, setCashPart] = useState(""); // split
   const [customerId, setCustomerId] = useState<number | null>(null); // credit
+  const setWholesaleMode = useCart((s) => s.setWholesaleMode);
   const [limitOverride, setLimitOverride] = useState(false); // admin approved over-limit
   const [askLimitPin, setAskLimitPin] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -242,7 +243,13 @@ export function TenderPanel({
             <span className="mb-1 block text-sm text-ink/70">Charge to customer's account</span>
             <select
               value={customerId ?? ""}
-              onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : null)}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                setCustomerId(id);
+                // Wholesale customers always get wholesale pricing (v3 §9 method 3).
+                const picked = customers.find((c) => c.id === id);
+                if (picked?.customer_type === "wholesale") setWholesaleMode(true);
+              }}
               className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
             >
               <option value="">Select a customer…</option>

@@ -4,18 +4,21 @@
 
 import { native } from "@/native";
 
+export type CustomerType = "retail" | "wholesale";
+
 export interface Customer {
   id: number;
   name: string;
   phone: string | null;
   note: string | null;
   credit_limit_pesewas: number | null;
+  customer_type: CustomerType; // wholesale customers always get wholesale pricing (v3 §9)
   active: number;
   balance_pesewas: number; // computed: charges − payments
 }
 
 const SELECT_CUSTOMER = `
-  SELECT c.id, c.name, c.phone, c.note, c.credit_limit_pesewas, c.active,
+  SELECT c.id, c.name, c.phone, c.note, c.credit_limit_pesewas, c.customer_type, c.active,
          COALESCE((
            SELECT SUM(CASE l.kind WHEN 'charge' THEN l.amount_pesewas ELSE -l.amount_pesewas END)
              FROM customer_ledger l WHERE l.customer_id = c.id
@@ -37,20 +40,21 @@ export interface CustomerInput {
   phone: string | null;
   note: string | null;
   credit_limit_pesewas: number | null;
+  customer_type: CustomerType;
 }
 
 export async function createCustomer(input: CustomerInput): Promise<number> {
   const res = await native.execute(
-    "INSERT INTO customers (name, phone, note, credit_limit_pesewas, active, created_at) VALUES (?, ?, ?, ?, 1, ?)",
-    [input.name.trim(), input.phone, input.note, input.credit_limit_pesewas, new Date().toISOString()]
+    "INSERT INTO customers (name, phone, note, credit_limit_pesewas, customer_type, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+    [input.name.trim(), input.phone, input.note, input.credit_limit_pesewas, input.customer_type, new Date().toISOString()]
   );
   return res.lastInsertId!;
 }
 
 export async function updateCustomer(id: number, input: CustomerInput): Promise<void> {
   await native.execute(
-    "UPDATE customers SET name = ?, phone = ?, note = ?, credit_limit_pesewas = ? WHERE id = ?",
-    [input.name.trim(), input.phone, input.note, input.credit_limit_pesewas, id]
+    "UPDATE customers SET name = ?, phone = ?, note = ?, credit_limit_pesewas = ?, customer_type = ? WHERE id = ?",
+    [input.name.trim(), input.phone, input.note, input.credit_limit_pesewas, input.customer_type, id]
   );
 }
 

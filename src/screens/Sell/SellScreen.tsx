@@ -44,6 +44,8 @@ export function SellScreen() {
   const subtotal = useCart((s) => s.subtotal());
   const discount = useCart((s) => s.discountPesewas);
   const total = useCart((s) => s.total());
+  const wholesaleMode = useCart((s) => s.wholesaleMode);
+  const setWholesaleMode = useCart((s) => s.setWholesaleMode);
 
   const focusScan = () => scanRef.current?.focus();
   const openTender = () => {
@@ -230,6 +232,25 @@ export function SellScreen() {
 
       {/* Right: the receipt-tape cart (relative so the tender panel overlays it) */}
       <aside className="relative flex flex-col bg-paper p-4">
+        {/* Pricing mode (v3 §9): wholesale applies each product's per-piece
+            wholesale price to the whole sale, regardless of quantity. */}
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs text-ink/50">Pricing</span>
+          <div className="flex overflow-hidden rounded-lg border border-ink/15 text-xs">
+            {([false, true] as const).map((mode) => (
+              <button
+                key={String(mode)}
+                onClick={() => setWholesaleMode(mode)}
+                className={cn(
+                  "px-3 py-1.5 font-sans font-medium",
+                  wholesaleMode === mode ? "bg-ledger text-tape" : "bg-tape text-ink/60 hover:bg-paper"
+                )}
+              >
+                {mode ? "Wholesale" : "Retail"}
+              </button>
+            ))}
+          </div>
+        </div>
         {lastSale && (
           <div className="mb-2 rounded-xl border border-ledger/30 bg-ledger/5 px-4 py-3 text-sm">
             <span className="font-semibold text-ledger">Sale {lastSale.receiptNo}</span> saved.

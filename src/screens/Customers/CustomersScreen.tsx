@@ -231,6 +231,7 @@ function CustomerForm({
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [note, setNote] = useState(customer?.note ?? "");
   const [limit, setLimit] = useState(customer?.credit_limit_pesewas != null ? String(customer.credit_limit_pesewas / 100) : "");
+  const [type, setType] = useState<"retail" | "wholesale">(customer?.customer_type ?? "retail");
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
@@ -240,6 +241,7 @@ function CustomerForm({
       phone: phone.trim() || null,
       note: note.trim() || null,
       credit_limit_pesewas: limit.trim() ? toPesewas(limit) : null,
+      customer_type: type,
     };
     if (customer) await updateCustomer(customer.id, input);
     else await createCustomer(input);
@@ -253,6 +255,16 @@ function CustomerForm({
         <div className="space-y-3">
           <Field label="Name"><Input value={name} onChange={setName} /></Field>
           <Field label="Phone"><Input value={phone} onChange={setPhone} /></Field>
+          <Field label="Customer type">
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as "retail" | "wholesale")}
+              className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+            >
+              <option value="retail">Retail</option>
+              <option value="wholesale">Wholesale — always gets wholesale prices</option>
+            </select>
+          </Field>
           <Field label="Credit limit (GHS, optional)"><Input value={limit} onChange={setLimit} placeholder="no limit" /></Field>
           <Field label="Note"><Input value={note} onChange={setNote} /></Field>
         </div>
