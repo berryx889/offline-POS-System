@@ -103,7 +103,7 @@ export function ReportsScreen() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-3 flex gap-1 border-b border-ink/10">
+      <div className="mb-3 flex gap-1 border-b border-ink/8">
         {(["product", "category", "cashier", "voided", "movements"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -180,7 +180,7 @@ function Table({
 }) {
   return (
     <table className="w-full text-left text-sm tabular-nums">
-      <thead className="sticky top-0 border-b border-ink/10 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
+      <thead className="sticky top-0 border-b border-ink/8 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
         <tr>
           {headers.map((h, i) => (
             <th key={h} className={cn("px-4 py-3 font-medium", i > 0 && i >= headers.length - 1 && "text-right")}>

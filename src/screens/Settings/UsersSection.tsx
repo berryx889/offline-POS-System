@@ -113,7 +113,7 @@ export function UsersSection() {
         ))}
       </ul>
 
-      <div className="rounded-xl border border-ink/10 bg-paper p-4">
+      <div className="rounded-xl border border-ink/8 bg-paper p-4">
         <p className="mb-3 text-sm font-medium text-ink">Add user</p>
         <div className="flex flex-wrap items-end gap-2">
           <input

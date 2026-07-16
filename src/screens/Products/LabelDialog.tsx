@@ -85,7 +85,7 @@ export function LabelDialog({ onClose }: { onClose: () => void }) {
           <span className="ml-auto text-sm text-ink/50">{totalLabels} label{totalLabels === 1 ? "" : "s"}</span>
         </div>
 
-        <div className="mt-3 flex-1 overflow-auto rounded-lg border border-ink/10">
+        <div className="mt-3 flex-1 overflow-auto rounded-lg border border-ink/8">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 bg-paper text-xs uppercase tracking-wide text-ink/50">
               <tr>

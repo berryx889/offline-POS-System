@@ -119,7 +119,7 @@ export function ProductDrawer({ product, onClose }: { product: Product | null; o
         className="flex h-full w-full max-w-md flex-col bg-paper shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-ink/10 bg-tape px-5 py-4">
+        <div className="flex items-center justify-between border-b border-ink/8 bg-tape px-5 py-4">
           <h2 className="font-sans text-lg font-semibold text-ink">
             {isEdit ? "Edit product" : "Add product"}
           </h2>
@@ -207,7 +207,7 @@ export function ProductDrawer({ product, onClose }: { product: Product | null; o
           {error && <p className="text-sm font-medium text-stamp">{error}</p>}
         </div>
 
-        <div className="border-t border-ink/10 bg-tape px-5 py-4">
+        <div className="border-t border-ink/8 bg-tape px-5 py-4">
           <button
             onClick={save}
             disabled={busy}

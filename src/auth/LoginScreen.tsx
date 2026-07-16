@@ -69,7 +69,7 @@ export function LoginScreen() {
                     setPin("");
                   }}
                   className={cn(
-                    "flex w-full items-center gap-3 rounded-xl border border-ink/10 bg-paper px-4 py-3.5 text-left",
+                    "flex w-full items-center gap-3 rounded-xl border border-ink/8 bg-paper px-4 py-3.5 text-left",
                     "transition-colors hover:border-ledger/30 hover:bg-ledger/5",
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-carbon"
                   )}

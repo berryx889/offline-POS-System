@@ -56,7 +56,7 @@ export function CustomersScreen() {
 
         <div className="flex-1 overflow-auto rounded-2xl border border-ink/8 bg-tape shadow-card">
           <table className="w-full text-left text-sm tabular-nums">
-            <thead className="sticky top-0 border-b border-ink/10 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
+            <thead className="sticky top-0 border-b border-ink/8 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
@@ -92,7 +92,7 @@ export function CustomersScreen() {
         </div>
       </section>
 
-      <aside className="border-l border-ink/10 bg-paper p-5">
+      <aside className="border-l border-ink/8 bg-paper p-5">
         {selected ? (
           <CustomerDetail customer={selected} onEdit={() => setEditing(selected)} />
         ) : (

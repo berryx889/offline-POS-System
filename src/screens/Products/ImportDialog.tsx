@@ -100,7 +100,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
               {invalidCount > 0 && <span className="text-stamp">{invalidCount} with errors (skipped)</span>}
             </div>
 
-            <div className="mt-2 flex-1 overflow-auto rounded-lg border border-ink/10">
+            <div className="mt-2 flex-1 overflow-auto rounded-lg border border-ink/8">
               <table className="w-full text-left text-sm tabular-nums">
                 <thead className="sticky top-0 bg-paper text-xs uppercase tracking-wide text-ink/50">
                   <tr>
