@@ -184,8 +184,8 @@ export function SellScreen() {
                   <button
                     onClick={() => pick(p)}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-xl border border-ink/10 bg-tape px-4 py-3 text-left shadow-card",
-                      "transition-colors hover:bg-ledger/5 focus:outline-none focus:ring-2 focus:ring-carbon"
+                      "flex w-full items-center justify-between rounded-2xl border border-ink/8 bg-tape px-4 py-3 text-left shadow-card",
+                      "transition-colors hover:bg-leaf focus:outline-none focus-visible:ring-2 focus-visible:ring-ledger/40"
                     )}
                   >
                     <div>
@@ -195,7 +195,7 @@ export function SellScreen() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <MoneyText pesewas={p.retail_price_pesewas} /> <span className="text-xs text-ink/40">/pc</span>
+                      <MoneyText pesewas={p.retail_price_pesewas} className="font-semibold text-ledger" /> <span className="text-xs text-ink/40">/pc</span>
                       {p.wholesale_price_pesewas != null && (
                         <div className="text-xs text-ink/50">
                           <MoneyText pesewas={p.wholesale_price_pesewas} size="sm" /> /box
