@@ -6,8 +6,7 @@
 // renames/price changes never alter old receipts. Money is pesewas throughout.
 
 import { native } from "@/native";
-import { piecesForUnit } from "@/stock";
-import { unitPrice, lineTotal, type CartLine } from "@/store/cartStore";
+import { unitPrice, lineTotal, linePieces, type CartLine } from "@/store/cartStore";
 import { applyStockMovement } from "./movements";
 
 export type PaymentMethod = "cash" | "momo" | "split" | "credit";
@@ -74,7 +73,7 @@ export interface SaleRow {
 
 export interface SaleItemRow {
   product_name: string;
-  unit: "piece" | "box";
+  unit: string; // 'piece', 'box', or a custom selling-unit name (snapshot)
   qty: number;
   unit_price_pesewas: number;
   line_total_pesewas: number;
@@ -229,8 +228,7 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
   // Pieces needed per product (a customer may have box + loose lines of one item).
   const need = new Map<number, number>();
   for (const l of lines) {
-    const pieces = piecesForUnit(l.qty, l.unit, l.piecesPerBox);
-    need.set(l.productId, (need.get(l.productId) ?? 0) + pieces);
+    need.set(l.productId, (need.get(l.productId) ?? 0) + linePieces(l));
   }
 
   await native.execute("BEGIN IMMEDIATE");
@@ -293,7 +291,7 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
     }
 
     for (const l of lines) {
-      const pieces = piecesForUnit(l.qty, l.unit, l.piecesPerBox);
+      const pieces = linePieces(l);
       await native.execute(
         `INSERT INTO sale_items
           (sale_id, product_id, product_name, unit, qty, unit_price_pesewas,

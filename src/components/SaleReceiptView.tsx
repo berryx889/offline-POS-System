@@ -4,6 +4,7 @@
 
 import { ReceiptTape } from "./ReceiptTape";
 import { MoneyText } from "./MoneyText";
+import { unitLabel } from "@/stock";
 import type { SaleDetail } from "@/db/queries/sales";
 import type { Settings } from "@/db/queries/settings";
 
@@ -91,7 +92,7 @@ export function SaleReceiptView({
             <div className="flex justify-between text-sm">
               <span className="font-semibold">{it.product_name}</span>
               <span>
-                {it.qty} {it.unit === "box" ? "BOX" : "PC"}
+                {it.qty} {unitLabel(it.unit)}
               </span>
             </div>
             <div className="flex justify-between text-xs text-ink/60">

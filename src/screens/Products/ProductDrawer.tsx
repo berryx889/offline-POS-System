@@ -22,6 +22,7 @@ import {
   type Product,
   type ProductInput,
 } from "@/db/queries/products";
+import { listUnits, saveUnits } from "@/db/queries/units";
 import { useSession } from "@/store/sessionStore";
 import { toPesewas, formatPesewas } from "@/money";
 import { formatStock } from "@/stock";
@@ -356,6 +357,8 @@ export function ProductDrawer({
             </L>
           </div>
 
+          {isEdit && <UnitsEditor productId={product!.id} userId={userId} />}
+
           <SectionRule label="Stock" />
 
           <div className="grid grid-cols-2 gap-3">
@@ -411,6 +414,108 @@ export function ProductDrawer({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Custom selling units beyond PC/BOX (v3 §8): each has a name, a pieces
+ *  multiplier, and its own price. Saved as a set on every add/remove. */
+function UnitsEditor({ productId, userId }: { productId: number; userId: number }) {
+  const queryClient = useQueryClient();
+  const { data: units = [] } = useQuery({
+    queryKey: ["units", productId],
+    queryFn: () => listUnits(productId),
+  });
+  const [name, setName] = useState("");
+  const [pieces, setPieces] = useState("");
+  const [price, setPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function persist(next: { name: string; pieces: number; price_pesewas: number }[]) {
+    await saveUnits(productId, next, userId);
+    queryClient.invalidateQueries({ queryKey: ["units", productId] });
+  }
+
+  async function add() {
+    setError(null);
+    const n = name.trim();
+    const pc = parseInt(pieces, 10) || 0;
+    const pr = toPesewas(price);
+    if (!n) return setError("Unit name is required.");
+    if (pc < 1) return setError("Pieces per unit must be at least 1.");
+    if (pr <= 0) return setError("Unit price is required.");
+    if (["pc", "piece", "box"].includes(n.toLowerCase()) || units.some((u) => u.name.toLowerCase() === n.toLowerCase())) {
+      return setError("That unit name is taken.");
+    }
+    try {
+      await persist([...units, { name: n, pieces: pc, price_pesewas: pr }]);
+      setName("");
+      setPieces("");
+      setPrice("");
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-ink/8 bg-tape px-3 py-2">
+      <span className="block text-sm text-ink/70">Selling units</span>
+      <p className="mt-0.5 text-xs text-ink/40">
+        Extra units beyond PC/BOX — e.g. Half Tray = 15 pcs at its own price.
+      </p>
+      {units.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {units.map((u) => (
+            <li key={u.id} className="flex items-center justify-between text-sm">
+              <span>
+                <span className="font-medium text-ink">{u.name}</span>{" "}
+                <span className="text-xs text-ink/50">= {u.pieces} pcs</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="tabular-nums text-ink/80">{formatPesewas(u.price_pesewas)}</span>
+                <button
+                  type="button"
+                  onClick={() => persist(units.filter((x) => x.id !== u.id))}
+                  className="text-ink/30 hover:text-stamp"
+                  aria-label={`Remove unit ${u.name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-tape px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+        />
+        <input
+          value={pieces}
+          onChange={(e) => setPieces(e.target.value)}
+          placeholder="pcs"
+          inputMode="numeric"
+          className="w-14 rounded-lg border border-ink/15 bg-tape px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-carbon"
+        />
+        <input
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="GHS"
+          inputMode="decimal"
+          className="w-20 rounded-lg border border-ink/15 bg-tape px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-carbon"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="shrink-0 rounded-lg border border-ledger px-3 text-xs font-medium text-ledger hover:bg-ledger/5"
+        >
+          Add
+        </button>
+      </div>
+      {error && <p className="mt-1 text-xs font-medium text-stamp">{error}</p>}
     </div>
   );
 }

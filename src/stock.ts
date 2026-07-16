@@ -23,3 +23,9 @@ export function formatStock(pieces: number, piecesPerBox: number): string {
 export function piecesForUnit(qty: number, unit: "piece" | "box", piecesPerBox: number): number {
   return unit === "box" ? qty * piecesPerBox : qty;
 }
+
+/** Display label for a sale-line unit: built-ins map to PC/BOX, custom selling
+ *  units ("Half Tray", "Crate") print their own name. */
+export function unitLabel(unit: string): string {
+  return unit === "piece" ? "PC" : unit === "box" ? "BOX" : unit;
+}

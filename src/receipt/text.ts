@@ -4,6 +4,7 @@
 // count for the paper: 32 for 58mm, 42 for 80mm.
 
 import { formatPesewas, formatGHS } from "@/money";
+import { unitLabel } from "@/stock";
 import type { SaleDetail } from "@/db/queries/sales";
 import type { Settings } from "@/db/queries/settings";
 
@@ -65,7 +66,7 @@ export function buildReceiptText(
 
   // Items — name + "qty UNIT" on one line, "@ price ... total" on the next.
   for (const it of items) {
-    const unit = it.unit === "box" ? "BOX" : "PC";
+    const unit = unitLabel(it.unit);
     lines.push(lr(it.product_name.slice(0, width - 8), `${it.qty} ${unit}`, width));
     lines.push(lr(`  @ ${formatPesewas(it.unit_price_pesewas)}`, formatPesewas(it.line_total_pesewas), width));
   }

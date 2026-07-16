@@ -66,11 +66,11 @@ export function SellScreen() {
         e.preventDefault();
         openTender();
       } else if (e.key === "F6") {
-        // Toggle the last cart line between PC and BOX.
+        // Cycle the last cart line through its selling units (PC → BOX → custom…).
         e.preventDefault();
-        const { lines: ls, setUnit } = useCart.getState();
+        const { lines: ls, cycleUnit } = useCart.getState();
         const last = ls[ls.length - 1];
-        if (last) setUnit(last.id, last.unit === "piece" ? "box" : "piece");
+        if (last) cycleUnit(last.id);
       } else if (e.key === "F9") {
         e.preventDefault();
         reprintLast();

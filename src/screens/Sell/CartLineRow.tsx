@@ -4,12 +4,13 @@
 // an admin can override the unit price (pos-prd.md §6.1; cashiers need an admin PIN).
 
 import { useEffect, useState } from "react";
-import { unitPrice, lineTotal, useCart, type CartLine } from "@/store/cartStore";
+import { unitPrice, lineTotal, availableUnits, useCart, type CartLine } from "@/store/cartStore";
 import { useSession } from "@/store/sessionStore";
 import { logAudit } from "@/db/queries/audit";
 import { MoneyText } from "@/components/MoneyText";
 import { AdminPinPrompt } from "@/components/AdminPinPrompt";
 import { toPesewas, formatPesewas } from "@/money";
+import { unitLabel } from "@/stock";
 import { cn } from "@/lib/cn";
 
 export function CartLineRow({ line }: { line: CartLine }) {
@@ -84,27 +85,42 @@ export function CartLineRow({ line }: { line: CartLine }) {
 
       <div className="mt-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {/* PC / BOX selector */}
-          <div className="flex overflow-hidden rounded-md border border-ink/15 text-xs">
-            {(["piece", "box"] as const).map((u) => {
-              const active = line.unit === u;
-              const disabled = u === "box" && !canBox;
-              return (
-                <button
-                  key={u}
-                  disabled={disabled}
-                  onClick={() => setUnit(line.id, u)}
-                  className={cn(
-                    "px-2 py-1 font-sans font-medium uppercase tracking-wide",
-                    active ? "bg-ledger text-tape" : "bg-tape text-ink/60 hover:bg-paper",
-                    disabled && "cursor-not-allowed opacity-30 hover:bg-tape"
-                  )}
-                >
-                  {u === "piece" ? "PC" : "BOX"}
-                </button>
-              );
-            })}
-          </div>
+          {/* Unit selector: PC/BOX toggle, or a dropdown once custom units exist */}
+          {line.extraUnits.length === 0 ? (
+            <div className="flex overflow-hidden rounded-md border border-ink/15 text-xs">
+              {(["piece", "box"] as const).map((u) => {
+                const active = line.unit === u;
+                const disabled = u === "box" && !canBox;
+                return (
+                  <button
+                    key={u}
+                    disabled={disabled}
+                    onClick={() => setUnit(line.id, u)}
+                    className={cn(
+                      "px-2 py-1 font-sans font-medium uppercase tracking-wide",
+                      active ? "bg-ledger text-tape" : "bg-tape text-ink/60 hover:bg-paper",
+                      disabled && "cursor-not-allowed opacity-30 hover:bg-tape"
+                    )}
+                  >
+                    {u === "piece" ? "PC" : "BOX"}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <select
+              value={line.unit}
+              onChange={(e) => setUnit(line.id, e.target.value)}
+              className="rounded-md border border-ink/15 bg-tape px-1.5 py-1 font-sans text-xs font-medium focus:outline-none focus:ring-2 focus:ring-carbon"
+              aria-label="Selling unit"
+            >
+              {availableUnits(line).map((u) => (
+                <option key={u.name} value={u.name}>
+                  {unitLabel(u.name)}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Qty */}
           <input

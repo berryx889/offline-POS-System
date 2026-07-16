@@ -1,50 +1,87 @@
 // The live cart. Each line is a snapshot-friendly copy of a product plus the unit
-// and qty being sold. Retail (per piece) and wholesale (per box) are independent
-// numbers carried on the line, so toggling the unit never *computes* one from the
-// other (pos-prd.md §7). Money is pesewas throughout.
+// and qty being sold. Units generalize PC/BOX (v3 §8): 'piece' and 'box' are the
+// built-ins (retail / wholesale-per-box, independent numbers per pos-prd.md §7),
+// and a product's custom selling units ("Half Tray", "Crate") each carry their own
+// pieces multiplier and price, snapshotted onto the line when selected. Money is
+// pesewas throughout.
 
 import { create } from "zustand";
 import type { Product } from "@/db/queries/products";
+import { listUnits, type SellingUnit } from "@/db/queries/units";
 
-export type Unit = "piece" | "box";
+export type Unit = string; // 'piece' | 'box' | a custom selling-unit name
 
 export interface CartLine {
-  id: string; // unique per line so boxes and loose pieces of one product coexist
+  id: string; // unique per line so different units of one product coexist
   productId: number;
   name: string;
   piecesPerBox: number;
   retailPesewas: number;
-  wholesalePesewas: number | null;
+  wholesalePesewas: number | null; // per BOX
+  /** Custom selling units available for this product (hydrated async after add). */
+  extraUnits: SellingUnit[];
   unit: Unit;
+  /** Pieces deducted per 1 of this unit (1 piece, piecesPerBox box, custom otherwise). */
+  unitPieces: number;
+  /** Snapshotted price for box/custom units; null for 'piece' (computed from retail). */
+  unitPricePesewas: number | null;
   qty: number;
   /** Admin-only per-line price override (pos-prd.md §6.1). Cleared when the unit
-   *  toggles so it never silently sticks to the wrong base price. */
+   *  changes so it never silently sticks to the wrong base price. */
   overridePesewas?: number | null;
 }
 
-/** Effective unit price: an admin override wins; otherwise box uses wholesale,
- *  piece uses retail (falling back to retail if toggled without a wholesale). */
+/** Effective unit price: an admin override wins; 'piece' uses retail; box/custom
+ *  use their snapshotted price (falling back to retail defensively). */
 export function unitPrice(line: CartLine): number {
   if (line.overridePesewas != null) return line.overridePesewas;
-  if (line.unit === "box") return line.wholesalePesewas ?? line.retailPesewas;
-  return line.retailPesewas;
+  if (line.unit === "piece") return line.retailPesewas;
+  return line.unitPricePesewas ?? line.retailPesewas;
 }
 
 export function lineTotal(line: CartLine): number {
   return unitPrice(line) * line.qty;
 }
 
+/** Pieces this line deducts from stock. */
+export function linePieces(line: CartLine): number {
+  return line.qty * line.unitPieces;
+}
+
+/** The units a line can be sold in, in picker order. */
+export function availableUnits(line: CartLine): { name: Unit; pieces: number; pricePesewas: number | null }[] {
+  const units: { name: Unit; pieces: number; pricePesewas: number | null }[] = [
+    { name: "piece", pieces: 1, pricePesewas: null },
+  ];
+  if (line.wholesalePesewas != null) {
+    units.push({ name: "box", pieces: line.piecesPerBox, pricePesewas: line.wholesalePesewas });
+  }
+  for (const u of line.extraUnits) {
+    units.push({ name: u.name, pieces: u.pieces, pricePesewas: u.price_pesewas });
+  }
+  return units;
+}
+
 function toLine(p: Product, unit: Unit): CartLine {
-  return {
+  const base: CartLine = {
     id: crypto.randomUUID(),
     productId: p.id,
     name: p.name,
     piecesPerBox: p.pieces_per_box,
     retailPesewas: p.retail_price_pesewas,
     wholesalePesewas: p.wholesale_price_pesewas,
-    unit,
+    extraUnits: [],
+    unit: "piece",
+    unitPieces: 1,
+    unitPricePesewas: null,
     qty: 1,
   };
+  if (unit === "box" && p.wholesale_price_pesewas != null) {
+    base.unit = "box";
+    base.unitPieces = p.pieces_per_box;
+    base.unitPricePesewas = p.wholesale_price_pesewas;
+  }
+  return base;
 }
 
 interface CartState {
@@ -55,10 +92,12 @@ interface CartState {
   touchTick: number;
   /** Add a product at the given unit. If a line with the same product+unit exists,
    *  increment it instead of adding a duplicate (the barcode fast-path relies on
-   *  this — rescanning bumps qty). */
+   *  this — rescanning bumps qty). Custom units hydrate in the background. */
   add: (product: Product, unit?: Unit) => void;
   setQty: (id: string, qty: number) => void;
   setUnit: (id: string, unit: Unit) => void;
+  /** Cycle to the next available unit (F6). */
+  cycleUnit: (id: string) => void;
   /** Admin price override for a line; null clears it back to the base price. */
   setOverride: (id: string, pesewas: number | null) => void;
   remove: (id: string) => void;
@@ -72,6 +111,20 @@ interface CartState {
   itemCount: () => number;
 }
 
+/** Fetch a product's custom units once and patch every cart line that shows it.
+ *  Best-effort: the cart works with PC/BOX even if this read fails. */
+function hydrateUnits(productId: number) {
+  listUnits(productId)
+    .then((units) => {
+      useCart.setState((state) => ({
+        lines: state.lines.map((l) =>
+          l.productId === productId ? { ...l, extraUnits: units } : l
+        ),
+      }));
+    })
+    .catch(() => {});
+}
+
 export const useCart = create<CartState>((set, get) => ({
   lines: [],
   lastTouchedId: null,
@@ -80,8 +133,9 @@ export const useCart = create<CartState>((set, get) => ({
 
   add: (product, unit = "piece") =>
     set((state) => {
-      // A box line needs a wholesale price; ignore the request if there isn't one.
+      // A box line needs a wholesale price; fall back to piece if there isn't one.
       if (unit === "box" && product.wholesale_price_pesewas == null) unit = "piece";
+      hydrateUnits(product.id);
       const existing = state.lines.find(
         (l) => l.productId === product.id && l.unit === unit
       );
@@ -113,12 +167,27 @@ export const useCart = create<CartState>((set, get) => ({
     set((state) => ({
       lines: state.lines.map((l) => {
         if (l.id !== id) return l;
-        // Can't switch to box without a wholesale price.
-        if (unit === "box" && l.wholesalePesewas == null) return l;
-        // Toggling the unit clears any override so it can't stick to the old base.
-        return { ...l, unit, overridePesewas: null };
+        const u = availableUnits(l).find((x) => x.name === unit);
+        if (!u) return l; // unknown unit (e.g. box without a wholesale price)
+        // Changing the unit clears any override so it can't stick to the old base.
+        return {
+          ...l,
+          unit: u.name,
+          unitPieces: u.pieces,
+          unitPricePesewas: u.pricePesewas,
+          overridePesewas: null,
+        };
       }),
     })),
+
+  cycleUnit: (id) => {
+    const line = get().lines.find((l) => l.id === id);
+    if (!line) return;
+    const units = availableUnits(line);
+    if (units.length < 2) return;
+    const idx = units.findIndex((u) => u.name === line.unit);
+    get().setUnit(id, units[(idx + 1) % units.length].name);
+  },
 
   setOverride: (id, pesewas) =>
     set((state) => ({
