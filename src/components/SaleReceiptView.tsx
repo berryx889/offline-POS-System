@@ -68,11 +68,17 @@ export function SaleReceiptView({
       subtitle={[settings.address, settings.phone].filter(Boolean).join(" — ")}
       banner={reprint ? "*REPRINT*" : undefined}
       subtotalPesewas={sale.subtotal_pesewas}
+      taxPesewas={sale.tax_pesewas}
       totalPesewas={sale.total_pesewas}
       footer={
         <div className="mt-1">
           {sale.discount_pesewas > 0 && <Row label="DISCOUNT" pesewas={sale.discount_pesewas} muted />}
           {payment}
+          {sale.note && (
+            <p className="mt-2 border-t border-dashed border-ink/30 pt-2 text-xs text-ink/60">
+              Note: {sale.note}
+            </p>
+          )}
           {settings.receipt_footer && (
             <p className="mt-3 border-t border-dashed border-ink/30 pt-2 text-center text-xs text-ink/60">
               {settings.receipt_footer}

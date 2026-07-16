@@ -10,6 +10,9 @@ import {
   salesByCashier,
   voidedSales,
   stockMovements,
+  inventoryValuation,
+  slowMovers,
+  stockAlerts,
   type Range,
 } from "@/db/queries/reports";
 import {
@@ -27,7 +30,15 @@ import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
 
 type Preset = "today" | "week" | "month" | "custom";
-type Tab = "product" | "category" | "cashier" | "voided" | "movements";
+type Tab =
+  | "product"
+  | "category"
+  | "cashier"
+  | "voided"
+  | "movements"
+  | "valuation"
+  | "slow"
+  | "alerts";
 
 export function ReportsScreen() {
   const [preset, setPreset] = useState<Preset>("today");
@@ -51,6 +62,9 @@ export function ReportsScreen() {
   const byCashier = useQuery({ queryKey: ["rep-cashier", ...key], queryFn: () => salesByCashier(range) }).data ?? [];
   const voided = useQuery({ queryKey: ["rep-voided", ...key], queryFn: () => voidedSales(range) }).data ?? [];
   const movements = useQuery({ queryKey: ["rep-moves", ...key], queryFn: () => stockMovements(range) }).data ?? [];
+  const valuation = useQuery({ queryKey: ["rep-valuation"], queryFn: inventoryValuation }).data;
+  const slow = useQuery({ queryKey: ["rep-slow", ...key], queryFn: () => slowMovers(range) }).data ?? [];
+  const alerts = useQuery({ queryKey: ["rep-alerts"], queryFn: stockAlerts }).data;
 
   function exportExcel() {
     if (!summary) return;
@@ -103,17 +117,28 @@ export function ReportsScreen() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-3 flex gap-1 border-b border-ink/8">
-        {(["product", "category", "cashier", "voided", "movements"] as Tab[]).map((t) => (
+      <div className="mb-3 flex flex-wrap gap-1 border-b border-ink/8">
+        {(
+          [
+            ["product", "By product"],
+            ["category", "By category"],
+            ["cashier", "By cashier"],
+            ["voided", "Voided"],
+            ["movements", "Stock movements"],
+            ["valuation", "Valuation"],
+            ["slow", "Slow movers"],
+            ["alerts", "Stock alerts"],
+          ] as [Tab, string][]
+        ).map(([t, tabLabel]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn(
-              "px-4 py-2 text-sm font-medium capitalize focus:outline-none",
+              "px-4 py-2 text-sm font-medium focus:outline-none",
               tab === t ? "border-b-2 border-ledger text-ledger" : "text-ink/50 hover:text-ink"
             )}
           >
-            {t === "movements" ? "Stock movements" : t === "voided" ? "Voided" : `By ${t}`}
+            {tabLabel}
           </button>
         ))}
       </div>
@@ -150,6 +175,66 @@ export function ReportsScreen() {
             ])}
             empty="No stock movements in this period."
           />
+        )}
+        {tab === "valuation" && (
+          <>
+            <div className="flex gap-6 border-b border-ink/8 px-4 py-3 text-sm">
+              <span className="text-ink/60">
+                At cost: <MoneyText pesewas={valuation?.totalCost ?? 0} currency className="font-semibold" />
+              </span>
+              <span className="text-ink/60">
+                At retail: <MoneyText pesewas={valuation?.totalRetail ?? 0} currency className="font-semibold text-ledger" />
+              </span>
+            </div>
+            <Table
+              headers={["Product", "Stock (pcs)", "At cost", "At retail"]}
+              rows={(valuation?.rows ?? []).map((r) => [
+                r.name,
+                r.stock_pieces,
+                <MoneyText pesewas={r.cost_value} />,
+                <MoneyText pesewas={r.retail_value} />,
+              ])}
+              empty="No stock on hand."
+            />
+          </>
+        )}
+        {tab === "slow" && (
+          <Table
+            headers={["Product", "Stock (pcs)", "Sold (pcs)", "Last sold"]}
+            rows={slow.map((r) => [
+              r.name,
+              r.stock_pieces,
+              r.pieces_sold,
+              r.last_sold
+                ? new Date(r.last_sold).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+                : "never",
+            ])}
+            empty="Everything moved in this period."
+          />
+        )}
+        {tab === "alerts" && (
+          <div className="grid grid-cols-2 divide-x divide-ink/8">
+            <div>
+              <p className="border-b border-ink/8 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-stamp">
+                Out of stock ({alerts?.out.length ?? 0})
+              </p>
+              <Table
+                headers={["Product", "Reorder level"]}
+                rows={(alerts?.out ?? []).map((r) => [r.name, r.low_stock_threshold])}
+                empty="Nothing is out of stock."
+              />
+            </div>
+            <div>
+              <p className="border-b border-ink/8 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-brass">
+                Low stock ({alerts?.low.length ?? 0})
+              </p>
+              <Table
+                headers={["Product", "Stock", "Reorder level"]}
+                rows={(alerts?.low ?? []).map((r) => [r.name, r.stock_pieces, r.low_stock_threshold])}
+                empty="Nothing is low."
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

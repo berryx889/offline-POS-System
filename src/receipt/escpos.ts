@@ -19,6 +19,9 @@ export interface EscPosOptions {
   cut?: boolean; // partial-cut the paper at the end
   openDrawer?: boolean; // pulse the cash drawer (cash sales)
   feedLines?: number; // blank lines before the cut so the tear-off clears the head
+  /** Print this as a Code128 barcode under the text (v3 §20 — the receipt number,
+   *  so a reprint is one scan away). */
+  barcode?: string;
 }
 
 export function encodeEscPos(text: string, opts: EscPosOptions = {}): Uint8Array {
@@ -31,6 +34,19 @@ export function encodeEscPos(text: string, opts: EscPosOptions = {}): Uint8Array
   const body = text.replace(/—/g, "-");
   for (const line of body.split("\n")) {
     out.push(...encodeText(line), 0x0a);
+  }
+
+  if (opts.barcode) {
+    out.push(0x0a);
+    out.push(ESC, 0x61, 0x01); // center
+    out.push(GS, 0x68, 50); // GS h — barcode height (dots)
+    out.push(GS, 0x77, 0x02); // GS w — module width
+    out.push(GS, 0x48, 0x02); // GS H — HRI text below the bars
+    // GS k m=73 (CODE128) n data — data starts with the {B code-set selector.
+    const data = [0x7b, 0x42, ...encodeText(opts.barcode)];
+    out.push(GS, 0x6b, 0x49, data.length, ...data);
+    out.push(0x0a);
+    out.push(ESC, 0x61, 0x00); // back to left align
   }
 
   const feed = opts.feedLines ?? 4;

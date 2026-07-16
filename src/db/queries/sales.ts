@@ -24,6 +24,11 @@ export interface CommitSaleInput {
   lines: CartLine[];
   payment: PaymentInput;
   discountPesewas?: number;
+  /** Tax rate in percent (v3 §10, from settings). Tax is computed here, added on
+   *  top of (subtotal − discount), and stored on the sale. */
+  taxRatePercent?: number;
+  /** Optional cashier note printed on the receipt. */
+  note?: string;
   /** Required for credit sales — who owes the balance. */
   customerId?: number;
 }
@@ -67,6 +72,8 @@ export interface SaleRow {
   credit_pesewas: number;
   customer_id: number | null;
   customer_name: string | null;
+  tax_pesewas: number;
+  note: string | null;
   status: "completed" | "voided";
   created_at: string;
 }
@@ -89,7 +96,7 @@ const SELECT_SALE = `
          s.discount_pesewas, s.total_pesewas, s.amount_paid_pesewas, s.change_pesewas,
          s.payment_method, s.cash_part_pesewas, s.momo_part_pesewas, s.momo_reference,
          s.credit_pesewas, s.customer_id, cu.name AS customer_name,
-         s.status, s.created_at
+         s.tax_pesewas, s.note, s.status, s.created_at
     FROM sales s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN customers cu ON cu.id = s.customer_id`;
@@ -215,7 +222,8 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
   // Compute totals server-side rather than trusting the UI.
   const subtotal = lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const discount = input.discountPesewas ?? 0;
-  const total = subtotal - discount;
+  const tax = Math.round(Math.max(0, subtotal - discount) * ((input.taxRatePercent ?? 0) / 100));
+  const total = subtotal - discount + tax;
   const change =
     payment.method === "cash" ? Math.max(0, payment.amountPaidPesewas - total) : 0;
   // Credit: the unpaid portion charged to the customer's account.
@@ -259,8 +267,8 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
         (receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas,
          amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas,
          momo_part_pesewas, momo_reference, status, seq, created_at,
-         customer_id, credit_pesewas)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?)`,
+         customer_id, credit_pesewas, tax_pesewas, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`,
       [
         receiptNo,
         userId,
@@ -277,6 +285,8 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
         now,
         input.customerId ?? null,
         credit,
+        tax,
+        input.note?.trim() || null,
       ]
     );
     const saleId = res.lastInsertId!;

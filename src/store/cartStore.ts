@@ -138,6 +138,8 @@ interface CartState {
   setOverride: (id: string, pesewas: number | null) => void;
   remove: (id: string) => void;
   clear: () => void;
+  /** Replace the cart wholesale (resume of a held sale). */
+  restore: (cart: { lines: CartLine[]; discountPesewas: number; wholesaleMode: boolean }) => void;
   /** Whole-sale discount in pesewas (pos-prd.md §6.1). */
   discountPesewas: number;
   setDiscount: (pesewas: number) => void;
@@ -242,6 +244,15 @@ export const useCart = create<CartState>((set, get) => ({
   remove: (id) => set((state) => ({ lines: state.lines.filter((l) => l.id !== id) })),
 
   clear: () => set({ lines: [], discountPesewas: 0, wholesaleMode: false }),
+
+  /** Replace the cart wholesale (resume of a held sale). */
+  restore: (cart) =>
+    set({
+      lines: cart.lines,
+      discountPesewas: cart.discountPesewas,
+      wholesaleMode: cart.wholesaleMode,
+      lastTouchedId: null,
+    }),
 
   setDiscount: (pesewas) => set({ discountPesewas: Math.max(0, Math.floor(pesewas)) }),
 

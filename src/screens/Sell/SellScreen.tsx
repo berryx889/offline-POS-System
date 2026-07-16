@@ -8,6 +8,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { searchProducts, findByBarcode, type Product } from "@/db/queries/products";
 import { getSettings } from "@/db/queries/settings";
 import { getSaleDetail, getLastSale, type CommittedSale } from "@/db/queries/sales";
+import { holdSale, listHeld, takeHeld, discardHeld } from "@/db/queries/held";
+import { useSession } from "@/store/sessionStore";
 import { printSale } from "@/receipt/print";
 import { native } from "@/native";
 import { useCart } from "@/store/cartStore";
@@ -26,9 +28,13 @@ export function SellScreen() {
   const [notFound, setNotFound] = useState<string | null>(null);
   const [tenderOpen, setTenderOpen] = useState(false);
   const [lastSale, setLastSale] = useState<CommittedSale | null>(null);
+  const [holdOpen, setHoldOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
+  const [holdLabel, setHoldLabel] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+  const userId = useSession((s) => s.user?.id) ?? 0;
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const soundOn = settings?.sound_enabled !== "0";
@@ -46,6 +52,15 @@ export function SellScreen() {
   const total = useCart((s) => s.total());
   const wholesaleMode = useCart((s) => s.wholesaleMode);
   const setWholesaleMode = useCart((s) => s.setWholesaleMode);
+  const restore = useCart((s) => s.restore);
+
+  const { data: held = [] } = useQuery({ queryKey: ["held-sales"], queryFn: listHeld });
+
+  // Tax (v3 §10): optional flat rate from Settings, added on top of the discounted
+  // subtotal. 0 (the default) hides it everywhere.
+  const taxRatePercent = Math.max(0, parseFloat(settings?.tax_rate_percent ?? "0") || 0);
+  const taxPesewas = Math.round(total * (taxRatePercent / 100));
+  const grandTotal = total + taxPesewas;
 
   const focusScan = () => scanRef.current?.focus();
   const openTender = () => {
@@ -111,6 +126,26 @@ export function SellScreen() {
   async function reprintLast() {
     const [detail, freshSettings] = await Promise.all([getLastSale(), getSettings()]);
     if (detail) await printSale(detail, freshSettings, { reprint: true });
+  }
+
+  // Hold/resume (v3 §10): park the cart, serve the next customer, pick it up later.
+  async function doHold() {
+    const { lines: ls, discountPesewas, wholesaleMode: ws } = useCart.getState();
+    if (ls.length === 0) return;
+    await holdSale({ lines: ls, discountPesewas, wholesaleMode: ws }, holdLabel, userId);
+    clear();
+    setHoldOpen(false);
+    setHoldLabel("");
+    queryClient.invalidateQueries({ queryKey: ["held-sales"] });
+    focusScan();
+  }
+
+  async function doResume(id: number) {
+    const cart = await takeHeld(id);
+    if (cart) restore(cart);
+    setHeldOpen(false);
+    queryClient.invalidateQueries({ queryKey: ["held-sales"] });
+    focusScan();
   }
 
   async function onSaleDone(sale: CommittedSale) {
@@ -269,7 +304,8 @@ export function SellScreen() {
             subtitle={settings?.address}
             subtotalPesewas={lines.length ? subtotal : undefined}
             discountPesewas={discount}
-            totalPesewas={lines.length ? total : undefined}
+            taxPesewas={lines.length ? taxPesewas : undefined}
+            totalPesewas={lines.length ? grandTotal : undefined}
           >
             {lines.length === 0 ? (
               <div className="flex h-full min-h-[200px] items-center justify-center text-center text-sm text-ink/40">
@@ -292,23 +328,44 @@ export function SellScreen() {
             )}
           >
             <span className="text-lg font-semibold">Charge</span>
-            <MoneyText pesewas={total} size="lg" currency className="font-semibold" />
+            <MoneyText pesewas={grandTotal} size="lg" currency className="font-semibold" />
           </button>
-          {lines.length > 0 && (
-            <button
-              onClick={() => {
-                if (confirm("Clear the whole sale?")) clear();
-              }}
-              className="h-10 w-full rounded-xl text-sm text-ink/50 hover:text-stamp focus:outline-none focus:ring-2 focus:ring-carbon"
-            >
-              Clear sale
-            </button>
+          {(lines.length > 0 || held.length > 0) && (
+            <div className="flex gap-2">
+              {lines.length > 0 && (
+                <button
+                  onClick={() => setHoldOpen(true)}
+                  className="h-10 flex-1 rounded-xl border border-ink/15 text-sm font-medium text-ink/70 hover:bg-tape focus:outline-none focus:ring-2 focus:ring-carbon"
+                >
+                  Hold sale
+                </button>
+              )}
+              {held.length > 0 && (
+                <button
+                  onClick={() => setHeldOpen(true)}
+                  className="h-10 flex-1 rounded-xl border border-carbon/30 bg-carbon/5 text-sm font-medium text-carbon hover:bg-carbon/10 focus:outline-none focus:ring-2 focus:ring-carbon"
+                >
+                  Held ({held.length})
+                </button>
+              )}
+              {lines.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm("Clear the whole sale?")) clear();
+                  }}
+                  className="h-10 flex-1 rounded-xl text-sm text-ink/50 hover:text-stamp focus:outline-none focus:ring-2 focus:ring-carbon"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           )}
         </div>
 
         {tenderOpen && (
           <TenderPanel
-            totalPesewas={total}
+            totalPesewas={grandTotal}
+            taxRatePercent={taxRatePercent}
             onCancel={() => {
               setTenderOpen(false);
               focusScan();
@@ -317,6 +374,98 @@ export function SellScreen() {
           />
         )}
       </aside>
+
+      {/* Hold sale: optional label ("Blue shirt", "Maame"), then park the cart. */}
+      {holdOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/40 p-6">
+          <div className="w-full max-w-sm rounded-2xl border border-ink/8 bg-tape p-6 shadow-card">
+            <h2 className="font-sans text-lg font-semibold text-ink">Hold this sale</h2>
+            <label className="mt-3 block">
+              <span className="mb-1 block text-sm text-ink/70">Label (optional)</span>
+              <input
+                autoFocus
+                value={holdLabel}
+                onChange={(e) => setHoldLabel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && doHold()}
+                placeholder="e.g. customer in blue shirt"
+                className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+              />
+            </label>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={doHold}
+                className="h-11 flex-1 rounded-xl bg-ledger text-sm font-semibold text-tape hover:bg-ledger-deep focus:outline-none focus:ring-2 focus:ring-carbon"
+              >
+                Hold
+              </button>
+              <button
+                onClick={() => setHoldOpen(false)}
+                className="h-11 flex-1 rounded-xl border border-ink/15 text-sm text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Held sales: resume (blocked while a sale is in progress) or discard. */}
+      {heldOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/40 p-6">
+          <div className="w-full max-w-md rounded-2xl border border-ink/8 bg-tape p-6 shadow-card">
+            <h2 className="font-sans text-lg font-semibold text-ink">Held sales</h2>
+            {lines.length > 0 && (
+              <p className="mt-1 text-xs text-ink/50">
+                Finish or hold the current sale to resume one of these.
+              </p>
+            )}
+            <ul className="mt-3 max-h-72 space-y-2 overflow-auto">
+              {held.map((h) => (
+                <li
+                  key={h.id}
+                  className="flex items-center justify-between rounded-xl border border-ink/8 bg-paper px-3 py-2"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-ink">
+                      {h.label ?? `Held sale #${h.id}`}
+                    </div>
+                    <div className="text-xs text-ink/50">
+                      {h.itemCount} item{h.itemCount === 1 ? "" : "s"} ·{" "}
+                      {new Date(h.created_at).toLocaleTimeString()} · {h.user_name}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MoneyText pesewas={h.totalPesewas} className="font-semibold" />
+                    <button
+                      onClick={() => doResume(h.id)}
+                      disabled={lines.length > 0}
+                      className="rounded-lg bg-ledger px-3 py-1.5 text-xs font-semibold text-tape hover:bg-ledger-deep disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-carbon"
+                    >
+                      Resume
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await discardHeld(h.id);
+                        queryClient.invalidateQueries({ queryKey: ["held-sales"] });
+                      }}
+                      className="text-ink/30 hover:text-stamp"
+                      aria-label={`Discard held sale ${h.label ?? h.id}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => setHeldOpen(false)}
+              className="mt-4 h-11 w-full rounded-xl border border-ink/15 text-sm text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Unregistered barcode modal — shows the code verbatim (§9.7). */}
       {notFound && (

@@ -77,6 +77,9 @@ export function buildReceiptText(
   if (sale.discount_pesewas > 0) {
     lines.push(lr("DISCOUNT", formatPesewas(sale.discount_pesewas), width));
   }
+  if (sale.tax_pesewas > 0) {
+    lines.push(lr("TAX", formatPesewas(sale.tax_pesewas), width));
+  }
   lines.push(lr("TOTAL", formatGHS(sale.total_pesewas), width));
 
   if (sale.payment_method === "cash") {
@@ -94,7 +97,11 @@ export function buildReceiptText(
   }
   lines.push(rule(width));
 
-  // Footer
+  // Cashier note (v3 §10), then the shop footer.
+  if (sale.note) {
+    for (const part of wrap(`Note: ${sale.note}`, width)) lines.push(part);
+    lines.push(rule(width));
+  }
   if (settings.receipt_footer) {
     for (const part of wrap(settings.receipt_footer, width)) lines.push(center(part, width));
   }

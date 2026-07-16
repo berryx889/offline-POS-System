@@ -8,6 +8,7 @@ import type { SaleDetail } from "@/db/queries/sales";
 import type { Settings } from "@/db/queries/settings";
 import { buildReceiptText } from "./text";
 import { encodeEscPos } from "./escpos";
+import { barcodeSvgString } from "@/barcode/svg";
 
 export type PrintMethod = "thermal" | "html";
 
@@ -17,8 +18,13 @@ export interface PrintResult {
   error?: string;
 }
 
-/** A print-ready HTML page for a single receipt, styled like the paper tape. */
-export function receiptHtml(text: string): string {
+/** A print-ready HTML page for a single receipt, styled like the paper tape.
+ *  `barcode` (the receipt number) prints as Code128 under the text (v3 §20). */
+export function receiptHtml(text: string, barcode?: string): string {
+  const barcodeBlock = barcode
+    ? `<div style="text-align:center;margin-top:8px">${barcodeSvgString(barcode, { height: 36, moduleWidth: 1.2 })}
+       <div style="font-family:'IBM Plex Mono',monospace;font-size:10px">${barcode}</div></div>`
+    : "";
   return `<!doctype html><html><head><meta charset="utf-8"><title>Receipt</title>
 <style>
   @page { size: 80mm auto; margin: 4mm; }
@@ -26,7 +32,7 @@ export function receiptHtml(text: string): string {
   pre { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px;
         line-height: 1.35; white-space: pre; margin: 0; }
 </style></head>
-<body><pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre></body></html>`;
+<body><pre>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre>${barcodeBlock}</body></html>`;
 }
 
 /** Print an arbitrary full HTML document via a hidden iframe → the OS print dialog.
@@ -49,8 +55,8 @@ export function printHtmlDoc(html: string): void {
 }
 
 /** Print an HTML receipt via the OS print dialog. */
-export function openHtmlReceipt(text: string): void {
-  printHtmlDoc(receiptHtml(text));
+export function openHtmlReceipt(text: string, barcode?: string): void {
+  printHtmlDoc(receiptHtml(text, barcode));
 }
 
 export async function printSale(
@@ -60,23 +66,25 @@ export async function printSale(
 ): Promise<PrintResult> {
   const text = buildReceiptText(detail, settings, opts);
   const printerName = settings.printer_name?.trim();
+  const receiptNo = detail.sale.receipt_no;
 
   if (printerName) {
     try {
       const bytes = encodeEscPos(text, {
         cut: true,
         openDrawer: settings.cash_drawer_enabled === "1" && detail.sale.payment_method !== "momo",
+        barcode: receiptNo,
       });
       await native.printReceipt(bytes, printerName);
       return { ok: true, method: "thermal" };
     } catch (e) {
       // Thermal failed — fall back to HTML so the receipt still prints.
-      openHtmlReceipt(text);
+      openHtmlReceipt(text, receiptNo);
       return { ok: false, method: "html", error: String(e) };
     }
   }
 
-  openHtmlReceipt(text);
+  openHtmlReceipt(text, receiptNo);
   return { ok: true, method: "html" };
 }
 

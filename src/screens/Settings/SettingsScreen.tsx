@@ -62,6 +62,13 @@ export function SettingsScreen() {
             className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
           />
         </Field>
+        <Field label="Tax rate % (0 = no tax; added on top at checkout)">
+          <Text
+            value={form.tax_rate_percent ?? "0"}
+            onChange={(v) => set("tax_rate_percent", v)}
+            placeholder="0"
+          />
+        </Field>
       </Section>
 
       <Section title="Printer">

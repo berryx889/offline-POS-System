@@ -108,6 +108,83 @@ export async function salesByCashier(r: Range): Promise<CashierRow[]> {
   );
 }
 
+// ---- Inventory reports (v3 §21) --------------------------------------------
+
+export interface ValuationRow {
+  name: string;
+  stock_pieces: number;
+  cost_value: number; // stock × cost (0 when no cost price)
+  retail_value: number; // stock × retail
+}
+
+/** What the shelf is worth: per-product stock valued at cost and at retail. */
+export async function inventoryValuation(): Promise<{ rows: ValuationRow[]; totalCost: number; totalRetail: number }> {
+  const rows = await native.select<ValuationRow>(
+    `SELECT name, stock_pieces,
+            stock_pieces * COALESCE(cost_price_pesewas, 0) AS cost_value,
+            stock_pieces * retail_price_pesewas AS retail_value
+       FROM products
+      WHERE active = 1 AND stock_pieces > 0
+      ORDER BY retail_value DESC`
+  );
+  let totalCost = 0;
+  let totalRetail = 0;
+  for (const r of rows) {
+    totalCost += r.cost_value;
+    totalRetail += r.retail_value;
+  }
+  return { rows, totalCost, totalRetail };
+}
+
+export interface SlowMoverRow {
+  name: string;
+  stock_pieces: number;
+  pieces_sold: number;
+  last_sold: string | null;
+}
+
+/** Products that barely moved in the range (including zero sales) but hold stock —
+ *  the money sleeping on the shelf. */
+export async function slowMovers(r: Range, limit = 25): Promise<SlowMoverRow[]> {
+  return native.select<SlowMoverRow>(
+    `SELECT p.name, p.stock_pieces,
+            COALESCE((
+              SELECT SUM(si.pieces_deducted) FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+               WHERE si.product_id = p.id AND s.status = 'completed'
+                 AND s.created_at >= ? AND s.created_at < ?
+            ), 0) AS pieces_sold,
+            (SELECT MAX(s.created_at) FROM sale_items si
+               JOIN sales s ON s.id = si.sale_id
+              WHERE si.product_id = p.id AND s.status = 'completed') AS last_sold
+       FROM products p
+      WHERE p.active = 1 AND p.stock_pieces > 0
+      ORDER BY pieces_sold ASC, p.stock_pieces DESC
+      LIMIT ?`,
+    [r.from, r.toExclusive, limit]
+  );
+}
+
+export interface StockAlertRow {
+  name: string;
+  stock_pieces: number;
+  low_stock_threshold: number;
+}
+
+/** Low-stock (at or under the reorder level) and out-of-stock lists. */
+export async function stockAlerts(): Promise<{ low: StockAlertRow[]; out: StockAlertRow[] }> {
+  const rows = await native.select<StockAlertRow>(
+    `SELECT name, stock_pieces, low_stock_threshold
+       FROM products
+      WHERE active = 1 AND stock_pieces <= low_stock_threshold
+      ORDER BY stock_pieces ASC, name`
+  );
+  return {
+    low: rows.filter((r) => r.stock_pieces > 0),
+    out: rows.filter((r) => r.stock_pieces === 0),
+  };
+}
+
 export interface VoidedRow {
   receipt_no: string;
   cashier: string;

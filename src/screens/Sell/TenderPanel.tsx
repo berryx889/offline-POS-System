@@ -25,16 +25,20 @@ const QUICK_CEDIS = [50, 100, 200];
 
 export function TenderPanel({
   totalPesewas,
+  taxRatePercent = 0,
   onCancel,
   onDone,
 }: {
+  /** Total due including tax — what the customer pays. */
   totalPesewas: number;
+  taxRatePercent?: number;
   onCancel: () => void;
   onDone: (sale: CommittedSale) => void;
 }) {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [received, setReceived] = useState(0); // cash, pesewas
   const [momoRef, setMomoRef] = useState("");
+  const [note, setNote] = useState("");
   const [cashPart, setCashPart] = useState(""); // split
   const [customerId, setCustomerId] = useState<number | null>(null); // credit
   const setWholesaleMode = useCart((s) => s.setWholesaleMode);
@@ -102,6 +106,8 @@ export function TenderPanel({
         lines,
         payment,
         discountPesewas,
+        taxRatePercent,
+        note: note.trim() || undefined,
         customerId: method === "credit" ? customerId! : undefined,
       });
       if (method === "credit" && overLimit) {
@@ -135,10 +141,13 @@ export function TenderPanel({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Digits typed into a field (note, MoMo ref, split cash) must not drive the
+      // cash keypad.
+      const typing = (e.target as HTMLElement).closest?.("input, textarea, select") != null;
       if (e.key === "Escape") onCancel();
       else if (e.key === "Enter") confirm();
-      else if (method === "cash" && e.key >= "0" && e.key <= "9") pushDigit(e.key);
-      else if (method === "cash" && e.key === "Backspace") setReceived(Math.floor(received / 1000) * 100);
+      else if (!typing && method === "cash" && e.key >= "0" && e.key <= "9") pushDigit(e.key);
+      else if (!typing && method === "cash" && e.key === "Backspace") setReceived(Math.floor(received / 1000) * 100);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -279,6 +288,12 @@ export function TenderPanel({
       )}
 
       <div className="mt-auto pt-4">
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Note on receipt (optional)"
+          className="mb-3 w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
+        />
         {method === "cash" && change >= 0 && received > 0 && (
           <div className="mb-3 flex items-baseline justify-between">
             <span className="text-sm text-ink/60">Change due</span>
