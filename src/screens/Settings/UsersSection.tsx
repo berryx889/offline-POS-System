@@ -54,7 +54,7 @@ export function UsersSection() {
   }
 
   return (
-    <section className="mb-6 rounded-2xl border border-ink/10 bg-tape p-5 shadow-card">
+    <section className="mb-6 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
       <h2 className="mb-4 font-sans text-sm font-semibold uppercase tracking-wide text-ink/50">
         Users & PINs
       </h2>

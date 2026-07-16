@@ -47,7 +47,7 @@ export function RestockDialog({ product, onClose }: { product: Product; onClose:
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 p-6" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl border border-ink/10 bg-tape p-6 shadow-card"
+        className="w-full max-w-sm rounded-2xl border border-ink/8 bg-tape p-6 shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-sans text-lg font-semibold text-ink">Restock — {product.name}</h2>

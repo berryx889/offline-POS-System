@@ -43,7 +43,7 @@ export function LoginScreen() {
       {/* subtle ledger backdrop band */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-ledger" />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-ink/10 bg-tape shadow-card">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-ink/8 bg-tape shadow-card">
         {/* Brand header */}
         <div className="flex flex-col items-center bg-ledger px-8 pb-7 pt-8 text-tape">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-tape/15">

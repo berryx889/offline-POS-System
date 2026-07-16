@@ -73,7 +73,7 @@ export function EndOfDayScreen() {
         <Stat label="Gross profit" value={<MoneyText pesewas={summary?.grossProfit ?? 0} currency className="text-ledger font-semibold" />} />
       </div>
 
-      <div className="mt-6 rounded-2xl border border-ink/10 bg-tape p-6 shadow-card">
+      <div className="mt-6 rounded-2xl border border-ink/8 bg-tape p-6 shadow-card">
         <h2 className="mb-4 font-sans text-sm font-semibold uppercase tracking-wide text-ink/50">
           Drawer reconciliation
         </h2>
@@ -125,7 +125,7 @@ export function EndOfDayScreen() {
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-ink/10 bg-tape p-4 shadow-card">
+    <div className="rounded-2xl border border-ink/8 bg-tape p-4 shadow-card">
       <p className="text-sm text-ink/50">{label}</p>
       <p className="mt-1 text-lg">{value}</p>
     </div>

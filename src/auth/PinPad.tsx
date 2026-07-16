@@ -67,7 +67,7 @@ export function PinPad({
             onClick={() => press(k)}
             className={cn(
               "flex h-16 items-center justify-center rounded-xl text-xl font-semibold",
-              "border border-ink/10 bg-tape shadow-card transition-colors",
+              "border border-ink/8 bg-tape shadow-card transition-colors",
               "hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon",
               (k === "clear" || k === "back") && "text-sm font-medium text-ink/60"
             )}

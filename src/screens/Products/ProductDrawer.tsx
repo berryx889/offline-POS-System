@@ -195,7 +195,7 @@ export function ProductDrawer({ product, onClose }: { product: Product | null; o
           </L>
 
           {isEdit ? (
-            <div className="rounded-lg border border-ink/10 bg-tape px-3 py-2 text-sm text-ink/60">
+            <div className="rounded-lg border border-ink/8 bg-tape px-3 py-2 text-sm text-ink/60">
               Current stock: {formatStock(product!.stock_pieces, product!.pieces_per_box)} — change it with Restock.
             </div>
           ) : (

@@ -55,7 +55,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 p-6" onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-ink/10 bg-tape p-6 shadow-card"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-ink/8 bg-tape p-6 shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

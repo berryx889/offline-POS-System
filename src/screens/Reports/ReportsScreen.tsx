@@ -162,7 +162,7 @@ function rangeFor(from: Date, to: Date): Range {
 
 function SummaryCard({ label, node }: { label: string; node: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-ink/10 bg-tape p-3 shadow-card">
+    <div className="rounded-xl border border-ink/8 bg-tape p-3 shadow-card">
       <p className="text-xs text-ink/50">{label}</p>
       <p className="mt-1">{node}</p>
     </div>

@@ -49,7 +49,7 @@ export function CustomersScreen() {
           </button>
         </div>
 
-        <div className="mb-4 rounded-xl border border-ink/10 bg-tape p-4 shadow-card">
+        <div className="mb-4 rounded-xl border border-ink/8 bg-tape p-4 shadow-card">
           <p className="text-xs text-ink/50">Total outstanding (owed to the shop)</p>
           <MoneyText pesewas={outstanding} size="xl" currency className={cn("font-semibold", outstanding > 0 ? "text-stamp" : "text-ledger")} />
         </div>
@@ -150,13 +150,13 @@ function CustomerDetail({ customer, onEdit }: { customer: Customer; onEdit: () =
         <button onClick={onEdit} className="text-sm text-carbon hover:underline">Edit</button>
       </div>
 
-      <div className="my-4 rounded-xl border border-ink/10 bg-tape p-4">
+      <div className="my-4 rounded-xl border border-ink/8 bg-tape p-4">
         <p className="text-xs text-ink/50">Balance owed</p>
         <MoneyText pesewas={customer.balance_pesewas} size="loud" currency className={customer.balance_pesewas > 0 ? "text-stamp" : "text-ledger"} />
       </div>
 
       {/* Record a repayment */}
-      <div className="mb-4 rounded-xl border border-ink/10 bg-tape p-4">
+      <div className="mb-4 rounded-xl border border-ink/8 bg-tape p-4">
         <p className="mb-2 text-sm font-medium text-ink">Record payment</p>
         <div className="flex items-center gap-2">
           <input
@@ -189,7 +189,7 @@ function CustomerDetail({ customer, onEdit }: { customer: Customer; onEdit: () =
 
       {/* Statement */}
       <p className="mb-2 text-sm font-medium text-ink">Statement</p>
-      <div className="flex-1 overflow-auto rounded-xl border border-ink/10 bg-tape">
+      <div className="flex-1 overflow-auto rounded-xl border border-ink/8 bg-tape">
         {ledger.length === 0 ? (
           <p className="p-4 text-center text-sm text-ink/40">No activity yet.</p>
         ) : (
@@ -248,7 +248,7 @@ function CustomerForm({
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 p-6" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-ink/10 bg-tape p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-2xl border border-ink/8 bg-tape p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
         <h2 className="mb-4 font-sans text-lg font-semibold text-ink">{customer ? "Edit customer" : "Add customer"}</h2>
         <div className="space-y-3">
           <Field label="Name"><Input value={name} onChange={setName} /></Field>

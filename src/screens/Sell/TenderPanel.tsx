@@ -195,7 +195,7 @@ export function TenderPanel({
               <button
                 key={k}
                 onClick={() => (k === "⌫" ? setReceived(Math.floor(received / 1000) * 100) : k === "00" ? (pushDigit("0"), pushDigit("0")) : pushDigit(k))}
-                className="h-14 rounded-xl border border-ink/10 bg-tape text-xl font-semibold shadow-card hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
+                className="h-14 rounded-xl border border-ink/8 bg-tape text-xl font-semibold shadow-card hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
               >
                 {k}
               </button>

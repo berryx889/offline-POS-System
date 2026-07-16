@@ -69,7 +69,7 @@ export function DashboardScreen() {
 
       {/* Today strip — revenue is the loud 48px brass figure */}
       <div className="mb-6 grid grid-cols-4 gap-4">
-        <div className="col-span-2 rounded-2xl border border-ink/10 bg-tape p-5 shadow-card">
+        <div className="col-span-2 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
           <p className="text-sm text-ink/50">Revenue</p>
           <MoneyText pesewas={summary?.revenue ?? 0} size="loud" currency className="text-brass" />
         </div>
@@ -175,7 +175,7 @@ export function DashboardScreen() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-ink/10 bg-tape p-5 shadow-card">
+    <div className="rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
       <p className="text-sm text-ink/50">{label}</p>
       <p className="mt-1 font-sans text-2xl font-semibold tabular-nums text-ink">{value}</p>
     </div>
@@ -184,7 +184,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-ink/10 bg-tape p-5 shadow-card">
+    <section className="rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
       <h2 className="mb-3 font-sans text-sm font-semibold uppercase tracking-wide text-ink/50">
         {title}
       </h2>

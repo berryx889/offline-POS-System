@@ -300,7 +300,7 @@ export function SellScreen() {
       {/* Unregistered barcode modal — shows the code verbatim (§9.7). */}
       {notFound && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-ink/40 p-6">
-          <div className="w-full max-w-sm rounded-2xl border border-ink/10 bg-tape p-6 shadow-card">
+          <div className="w-full max-w-sm rounded-2xl border border-ink/8 bg-tape p-6 shadow-card">
             <p className="text-sm text-ink/60">Barcode not registered</p>
             <p className="my-2 font-mono text-lg font-semibold text-ink">{notFound}</p>
             <p className="text-sm text-ink/60">
