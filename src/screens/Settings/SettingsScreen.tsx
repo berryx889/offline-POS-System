@@ -107,6 +107,20 @@ export function SettingsScreen() {
         </button>
       </Section>
 
+      <Section title="Security">
+        <Field label="Lock screen after inactivity (minutes, 0 = never)">
+          <Text
+            value={form.idle_lock_minutes ?? "0"}
+            onChange={(v) => set("idle_lock_minutes", v)}
+            placeholder="0"
+          />
+        </Field>
+        <p className="text-xs text-ink/50">
+          Returns to the PIN screen after this many minutes with no clicks, taps, or key presses —
+          the cart and any unsaved entry are left as they are.
+        </p>
+      </Section>
+
       <div className="mb-6 flex items-center gap-4">
         <button
           onClick={save}

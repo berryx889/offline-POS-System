@@ -85,6 +85,7 @@ export async function seedIfEmpty(): Promise<void> {
     ["cash_drawer_enabled", "0"],
     ["sound_enabled", "1"],
     ["tax_rate_percent", "0"],
+    ["idle_lock_minutes", "0"],
   ];
   for (const [key, value] of settings) {
     await native.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);

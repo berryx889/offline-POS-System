@@ -4,6 +4,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useSession } from "@/store/sessionStore";
 import { LoginScreen } from "@/auth/LoginScreen";
+import { useIdleLock } from "@/auth/useIdleLock";
 import { NavRail } from "@/components/NavRail";
 import { SellScreen } from "@/screens/Sell/SellScreen";
 import { ReprintsScreen } from "@/screens/Reprints/ReprintsScreen";
@@ -17,6 +18,10 @@ import { SettingsScreen } from "@/screens/Settings/SettingsScreen";
 export function App() {
   const user = useSession((s) => s.user);
   const isAdmin = user?.role === "admin";
+
+  // Idle-lock only matters once someone is logged in; the hook itself no-ops
+  // when the setting is 0, so it's cheap to always mount here.
+  useIdleLock();
 
   if (!user) return <LoginScreen />;
 
