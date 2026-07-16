@@ -10,21 +10,34 @@ export interface Product {
   id: number;
   name: string;
   barcode: string | null;
+  sku: string | null;
+  family: string | null;
+  brand: string | null;
+  supplier: string | null;
+  description: string | null;
+  image: string | null;
   category_id: number | null;
   category_name: string | null;
   pieces_per_box: number;
   retail_price_pesewas: number;
   wholesale_price_pesewas: number | null;
+  promo_price_pesewas: number | null;
+  bulk_price_pesewas: number | null;
+  bulk_min_qty: number | null;
   cost_price_pesewas: number | null;
   stock_pieces: number;
   low_stock_threshold: number;
+  expiry_date: string | null;
+  batch_number: string | null;
   active: number;
 }
 
 const SELECT_PRODUCT = `
-  SELECT p.id, p.name, p.barcode, p.category_id, c.name AS category_name, p.pieces_per_box,
-         p.retail_price_pesewas, p.wholesale_price_pesewas, p.cost_price_pesewas,
-         p.stock_pieces, p.low_stock_threshold, p.active
+  SELECT p.id, p.name, p.barcode, p.sku, p.family, p.brand, p.supplier, p.description,
+         p.image, p.category_id, c.name AS category_name, p.pieces_per_box,
+         p.retail_price_pesewas, p.wholesale_price_pesewas, p.promo_price_pesewas,
+         p.bulk_price_pesewas, p.bulk_min_qty, p.cost_price_pesewas,
+         p.stock_pieces, p.low_stock_threshold, p.expiry_date, p.batch_number, p.active
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id`;
 
@@ -47,8 +60,11 @@ export async function listProductsManage(filter: ProductFilter = {}): Promise<Pr
   if (!filter.includeInactive) where.push("p.active = 1");
   if (filter.text?.trim()) {
     const q = `%${filter.text.trim()}%`;
-    where.push("(p.name LIKE ? OR p.barcode LIKE ? OR c.name LIKE ?)");
-    params.push(q, q, q);
+    where.push(
+      `(p.name LIKE ? OR p.barcode LIKE ? OR c.name LIKE ?
+        OR p.sku LIKE ? OR p.family LIKE ? OR p.brand LIKE ? OR p.supplier LIKE ?)`
+    );
+    params.push(q, q, q, q, q, q, q);
   }
   if (filter.categoryId != null) {
     where.push("p.category_id = ?");
@@ -56,7 +72,11 @@ export async function listProductsManage(filter: ProductFilter = {}): Promise<Pr
   }
   if (filter.lowStockOnly) where.push("p.stock_pieces <= p.low_stock_threshold");
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  return native.select<Product>(`${SELECT_PRODUCT} ${clause} ORDER BY p.name`, params);
+  // Variants sort next to their family; standalone products sort by their own name.
+  return native.select<Product>(
+    `${SELECT_PRODUCT} ${clause} ORDER BY COALESCE(p.family, p.name), p.name`,
+    params
+  );
 }
 
 /** Search active products by name or category. Uses the FTS5 index when available
@@ -142,12 +162,23 @@ export async function ensureCategory(name: string): Promise<number> {
 export interface ProductInput {
   name: string;
   barcode: string | null;
+  sku: string | null;
+  family: string | null;
+  brand: string | null;
+  supplier: string | null;
+  description: string | null;
+  image: string | null;
   category_id: number | null;
   pieces_per_box: number;
   retail_price_pesewas: number;
   wholesale_price_pesewas: number | null;
+  promo_price_pesewas: number | null;
+  bulk_price_pesewas: number | null;
+  bulk_min_qty: number | null;
   cost_price_pesewas: number | null;
   low_stock_threshold: number;
+  expiry_date: string | null;
+  batch_number: string | null;
 }
 
 /** Create a product with opening stock. Opening stock is recorded as a stock
@@ -162,20 +193,32 @@ export async function createProduct(
   try {
     const res = await native.execute(
       `INSERT INTO products
-        (name, barcode, category_id, pieces_per_box, retail_price_pesewas,
-         wholesale_price_pesewas, cost_price_pesewas, stock_pieces, low_stock_threshold,
-         active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        (name, barcode, sku, family, brand, supplier, description, image, category_id,
+         pieces_per_box, retail_price_pesewas, wholesale_price_pesewas, promo_price_pesewas,
+         bulk_price_pesewas, bulk_min_qty, cost_price_pesewas, stock_pieces,
+         low_stock_threshold, expiry_date, batch_number, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       [
         input.name,
         input.barcode,
+        input.sku,
+        input.family,
+        input.brand,
+        input.supplier,
+        input.description,
+        input.image,
         input.category_id,
         input.pieces_per_box,
         input.retail_price_pesewas,
         input.wholesale_price_pesewas,
+        input.promo_price_pesewas,
+        input.bulk_price_pesewas,
+        input.bulk_min_qty,
         input.cost_price_pesewas,
         openingStockPieces,
         input.low_stock_threshold,
+        input.expiry_date,
+        input.batch_number,
         now,
         now,
       ]
@@ -211,19 +254,32 @@ export async function updateProduct(
   const now = new Date().toISOString();
   await native.execute(
     `UPDATE products SET
-       name = ?, barcode = ?, category_id = ?, pieces_per_box = ?,
-       retail_price_pesewas = ?, wholesale_price_pesewas = ?, cost_price_pesewas = ?,
-       low_stock_threshold = ?, updated_at = ?
+       name = ?, barcode = ?, sku = ?, family = ?, brand = ?, supplier = ?,
+       description = ?, image = ?, category_id = ?, pieces_per_box = ?,
+       retail_price_pesewas = ?, wholesale_price_pesewas = ?, promo_price_pesewas = ?,
+       bulk_price_pesewas = ?, bulk_min_qty = ?, cost_price_pesewas = ?,
+       low_stock_threshold = ?, expiry_date = ?, batch_number = ?, updated_at = ?
      WHERE id = ?`,
     [
       input.name,
       input.barcode,
+      input.sku,
+      input.family,
+      input.brand,
+      input.supplier,
+      input.description,
+      input.image,
       input.category_id,
       input.pieces_per_box,
       input.retail_price_pesewas,
       input.wholesale_price_pesewas,
+      input.promo_price_pesewas,
+      input.bulk_price_pesewas,
+      input.bulk_min_qty,
       input.cost_price_pesewas,
       input.low_stock_threshold,
+      input.expiry_date,
+      input.batch_number,
       now,
       id,
     ]
@@ -235,12 +291,24 @@ export async function updateProduct(
       changes.retail = [before.retail_price_pesewas, input.retail_price_pesewas];
     if (before.wholesale_price_pesewas !== input.wholesale_price_pesewas)
       changes.wholesale = [before.wholesale_price_pesewas, input.wholesale_price_pesewas];
+    if (before.promo_price_pesewas !== input.promo_price_pesewas)
+      changes.promo = [before.promo_price_pesewas, input.promo_price_pesewas];
+    if (before.bulk_price_pesewas !== input.bulk_price_pesewas)
+      changes.bulk = [before.bulk_price_pesewas, input.bulk_price_pesewas];
     if (before.cost_price_pesewas !== input.cost_price_pesewas)
       changes.cost = [before.cost_price_pesewas, input.cost_price_pesewas];
     if (Object.keys(changes).length > 0) {
       await logAudit(userId, "price_change", { product_id: id, name: input.name, changes });
     }
   }
+}
+
+/** Distinct family names, for the drawer's autocomplete. */
+export async function listFamilies(): Promise<string[]> {
+  const rows = await native.select<{ family: string }>(
+    "SELECT DISTINCT family FROM products WHERE family IS NOT NULL AND family != '' ORDER BY family"
+  );
+  return rows.map((r) => r.family);
 }
 
 /** Ensure a product has a scannable barcode (pos-prd.md §6.3 — shop-generated

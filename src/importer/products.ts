@@ -134,12 +134,23 @@ export async function commitRows(rows: ParsedRow[], userId: number): Promise<num
     const input: ProductInput = {
       name: r.name,
       barcode: r.barcode,
+      sku: null,
+      family: null,
+      brand: null,
+      supplier: null,
+      description: null,
+      image: null,
       category_id: categoryId,
       pieces_per_box: r.piecesPerBox,
       retail_price_pesewas: r.retailPesewas,
       wholesale_price_pesewas: r.wholesalePesewas,
+      promo_price_pesewas: null,
+      bulk_price_pesewas: null,
+      bulk_min_qty: null,
       cost_price_pesewas: r.costPesewas,
       low_stock_threshold: r.threshold,
+      expiry_date: null,
+      batch_number: null,
     };
     await createProduct(input, r.openingStock, userId);
     imported++;

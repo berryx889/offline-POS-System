@@ -1,9 +1,15 @@
-// Products management (pos-prd.md §6.3). Search + category + low-stock filters,
-// add/edit drawer, deactivate-vs-delete. Restock and Excel import come next.
+// Products management (pos-prd.md §6.3 + v3 variants). Search + category +
+// low-stock filters, add/edit drawer, deactivate-vs-delete. Variants sharing a
+// `family` render grouped under a family header with an "add variant" shortcut.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listProductsManage, listCategories, type Product } from "@/db/queries/products";
+import {
+  listProductsManage,
+  listCategories,
+  type Product,
+  type ProductInput,
+} from "@/db/queries/products";
 import { ProductDrawer } from "./ProductDrawer";
 import { RestockDialog } from "./RestockDialog";
 import { ImportDialog } from "./ImportDialog";
@@ -12,7 +18,26 @@ import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
 
-type DrawerState = { mode: "new" } | { mode: "edit"; product: Product } | null;
+type DrawerState =
+  | { mode: "new"; initial?: Partial<ProductInput> }
+  | { mode: "edit"; product: Product }
+  | null;
+
+/** Rows in display order with family headers injected before each variant group.
+ *  The list is already sorted by COALESCE(family, name), so groups are contiguous. */
+function withFamilyHeaders(products: Product[]): (Product | { header: string; first: Product; count: number })[] {
+  const out: (Product | { header: string; first: Product; count: number })[] = [];
+  for (let i = 0; i < products.length; i++) {
+    const p = products[i];
+    if (p.family && (i === 0 || products[i - 1].family !== p.family)) {
+      let count = 0;
+      while (i + count < products.length && products[i + count].family === p.family) count++;
+      out.push({ header: p.family, first: p, count });
+    }
+    out.push(p);
+  }
+  return out;
+}
 
 export function ProductsScreen() {
   const [text, setText] = useState("");
@@ -101,7 +126,41 @@ export function ProductsScreen() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => {
+            {withFamilyHeaders(products).map((row) => {
+              if ("header" in row) {
+                return (
+                  <tr key={`fam-${row.header}`} className="border-b border-ink/5 bg-paper/60">
+                    <td colSpan={5} className="px-4 py-2">
+                      <span className="font-sans text-sm font-semibold text-ink">{row.header}</span>
+                      {row.first.brand && (
+                        <span className="ml-2 text-xs text-ink/50">{row.first.brand}</span>
+                      )}
+                      <span className="ml-2 text-xs text-ink/40">
+                        {row.count} variant{row.count === 1 ? "" : "s"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        onClick={() =>
+                          setDrawer({
+                            mode: "new",
+                            initial: {
+                              family: row.header,
+                              brand: row.first.brand,
+                              supplier: row.first.supplier,
+                              category_id: row.first.category_id,
+                            },
+                          })
+                        }
+                        className="rounded-lg border border-ledger px-3 py-1 text-xs font-medium text-ledger hover:bg-ledger/5 focus:outline-none focus:ring-2 focus:ring-carbon"
+                      >
+                        + Variant
+                      </button>
+                    </td>
+                  </tr>
+                );
+              }
+              const p = row;
               const low = p.stock_pieces <= p.low_stock_threshold;
               return (
                 <tr
@@ -112,12 +171,20 @@ export function ProductsScreen() {
                     p.active !== 1 && "opacity-50"
                   )}
                 >
-                  <td className="px-4 py-3 font-sans font-medium text-ink">
-                    {low && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-stamp" />}
-                    {p.name}
-                    {p.active !== 1 && (
-                      <span className="ml-2 text-xs uppercase text-ink/40">inactive</span>
-                    )}
+                  <td className={cn("px-4 py-3 font-sans font-medium text-ink", p.family && "pl-8")}>
+                    <span className="flex items-center gap-2">
+                      {low && <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-stamp" />}
+                      {p.image && (
+                        <img src={p.image} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" />
+                      )}
+                      <span>
+                        {p.name}
+                        {p.sku && <span className="ml-2 text-xs font-normal text-ink/40">{p.sku}</span>}
+                        {p.active !== 1 && (
+                          <span className="ml-2 text-xs uppercase text-ink/40">inactive</span>
+                        )}
+                      </span>
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-ink/60">{p.category_name ?? "—"}</td>
                   <td className="px-4 py-3 text-ink/70">
@@ -161,6 +228,7 @@ export function ProductsScreen() {
       {drawer && (
         <ProductDrawer
           product={drawer.mode === "edit" ? drawer.product : null}
+          initial={drawer.mode === "new" ? drawer.initial : undefined}
           onClose={() => setDrawer(null)}
         />
       )}
