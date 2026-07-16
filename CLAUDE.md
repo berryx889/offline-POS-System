@@ -4,6 +4,10 @@ Write clean, simple, maintainable code. Prioritize clarity over unnecessary abst
 > This file is the source of truth. Read it before every feature and follow it strictly.
 > The full product spec lives in `pos-prd.md`. This file is the working contract; the PRD is the reference.
 > The build methodology lives in the `practical-vibe-coding` skill — build one feature at a time, verify, commit.
+>
+> **New session? Read `CONTEXT.md` first** — current status, the decisions behind the
+> code, the build history, and the dev-environment gotchas (they will save you hours).
+> `HANDOFF.md` covers the remaining Windows-only work.
 
 ## Project Overview
 CounterTop POS is a **fully offline** desktop point-of-sale app for Ghanaian wholesale-and-retail shops. It runs installed on a Windows PC at the counter with a local SQLite database — no internet, no server, no cloud.
