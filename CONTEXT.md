@@ -15,7 +15,7 @@ and current state. The other docs each have one job:
 
 ## 1. Status: feature-complete, v3 built and hardened
 
-Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **52 commits, all
+Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **54 commits, all
 on `main`, working tree clean.** Typecheck + lint pass.
 
 - ✅ Phases 1–7 (the PRD's whole build plan, `pos-prd.md §11`)
@@ -32,8 +32,13 @@ on `main`, working tree clean.** Typecheck + lint pass.
   (a redundant-SELECT "optimization") was reviewed and deliberately left
   alone — it would trade away a transaction-isolation guarantee for a minor
   perf win; reasoning in §9, not an oversight.
-- ⏳ **Windows-only work is still pending** — see `HANDOFF.md` (installer + thermal
-  USB write). Both genuinely need the Rust toolchain / real hardware.
+- ⏳ **Windows work is partially prepared, still blocked on real hardware.** The
+  thermal-printing Rust code (`7f6f179`) is written and compiles cleanly on
+  macOS, but was never compiled for Windows — no Windows target exists in any
+  environment this has been worked in. `HANDOFF.md` §2.3 says exactly what's
+  unverified and what the first on-device step should be. Icon generation and
+  the installer build are untouched — both genuinely need the Tauri CLI
+  running on a real Windows box.
 
 ## 2. What the app is
 
@@ -240,7 +245,7 @@ These cost real time during the build:
 
 ---
 
-## 7. Build history (52 commits, in order)
+## 7. Build history (54 commits, in order)
 
 Phases follow `pos-prd.md §11`; each slice was verified in the browser before commit.
 
@@ -275,6 +280,10 @@ Phases follow `pos-prd.md §11`; each slice was verified in the browser before c
   revisited after the FK-restore fix proved the risk of 3 copies was real) —
   §9 has the detail + what proved each fix correct; 1 finding (a redundant-
   SELECT "optimization") was reviewed and deliberately left alone.
+- **Windows prep** `7f6f179` implemented the thermal-printing Rust code
+  (HANDOFF.md §2.2/2.3) — compiles clean on macOS (Rust toolchain installed
+  this session), never compiled for Windows; see §1 and HANDOFF.md §2.3 for
+  exactly what remains unverified.
 
 ---
 
@@ -287,7 +296,7 @@ The user's PDF ("Practical Vibe Coding") was turned into a skill at
 > Constraints protect what's already built. Verify each step before moving on.
 > One commit per working feature.**
 
-The loop that produced all 52 commits: **read `CLAUDE.md` → build the smallest
+The loop that produced all 54 commits: **read `CLAUDE.md` → build the smallest
 useful slice → typecheck + lint → verify it in the browser → commit with what was
 verified → next.** Keep the diff small enough to review at a glance.
 
