@@ -31,7 +31,9 @@ export async function holdSale(
   );
 }
 
-export async function listHeld(): Promise<HeldSaleRow[]> {
+/** @param taxRatePercent Current tax rate (from Settings), so the preview total
+ *  matches what will actually be charged on resume — not just the subtotal. */
+export async function listHeld(taxRatePercent = 0): Promise<HeldSaleRow[]> {
   const rows = await native.select<{
     id: number;
     label: string | null;
@@ -53,6 +55,7 @@ export async function listHeld(): Promise<HeldSaleRow[]> {
         totalPesewas += lineTotal(l);
       }
       totalPesewas = Math.max(0, totalPesewas - cart.discountPesewas);
+      totalPesewas += Math.round(totalPesewas * (taxRatePercent / 100));
     } catch {
       /* unreadable cart still shows in the list so it can be discarded */
     }
@@ -60,19 +63,23 @@ export async function listHeld(): Promise<HeldSaleRow[]> {
   });
 }
 
-/** Load a held cart and remove it from the shelf (it's now live again). */
+/** Load a held cart and remove it from the shelf (it's now live again). Parses
+ *  before deleting: a corrupted cart_json leaves the row in place — visible in
+ *  the held list and explicitly discardable — instead of silently vanishing. */
 export async function takeHeld(id: number): Promise<HeldCart | null> {
   const [row] = await native.select<{ cart_json: string }>(
     "SELECT cart_json FROM held_sales WHERE id = ?",
     [id]
   );
   if (!row) return null;
-  await native.execute("DELETE FROM held_sales WHERE id = ?", [id]);
+  let cart: HeldCart;
   try {
-    return JSON.parse(row.cart_json) as HeldCart;
+    cart = JSON.parse(row.cart_json) as HeldCart;
   } catch {
     return null;
   }
+  await native.execute("DELETE FROM held_sales WHERE id = ?", [id]);
+  return cart;
 }
 
 export async function discardHeld(id: number): Promise<void> {

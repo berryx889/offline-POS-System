@@ -246,13 +246,19 @@ export const useCart = create<CartState>((set, get) => ({
   clear: () => set({ lines: [], discountPesewas: 0, wholesaleMode: false }),
 
   /** Replace the cart wholesale (resume of a held sale). */
-  restore: (cart) =>
+  restore: (cart) => {
     set({
       lines: cart.lines,
       discountPesewas: cart.discountPesewas,
       wholesaleMode: cart.wholesaleMode,
       lastTouchedId: null,
-    }),
+    });
+    // Refresh each line's custom selling units — a line held before its async
+    // hydrateUnits() resolved would otherwise stay stuck without them forever.
+    for (const productId of new Set(cart.lines.map((l) => l.productId))) {
+      hydrateUnits(productId);
+    }
+  },
 
   setDiscount: (pesewas) => set({ discountPesewas: Math.max(0, Math.floor(pesewas)) }),
 

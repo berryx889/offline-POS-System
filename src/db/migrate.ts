@@ -48,13 +48,17 @@ async function runMigrate(): Promise<void> {
     "CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id)"
   );
 
-  // v3: variants, aliases, selling units, movement history, tax/notes. Each step
-  // is detected structurally (missing column / present CHECK) so it runs once on
-  // upgraded DBs and never on fresh ones. New TABLES come from schema.sql above.
-  if (await missingColumn("products", "family")) await addProductV3Columns();
+  // v3: variants, aliases, selling units, movement history, tax/notes. Each
+  // column is detected and added individually (not as an all-or-nothing group)
+  // so a crash between ALTERs leaves a resumable state instead of a DB that's
+  // permanently missing a column the app now assumes exists. New TABLES come
+  // from schema.sql above.
+  await addProductV3Columns();
   await native.execute("CREATE INDEX IF NOT EXISTS idx_products_family ON products(family)");
   if (await missingColumn("sales", "tax_pesewas")) {
     await native.execute("ALTER TABLE sales ADD COLUMN tax_pesewas INTEGER NOT NULL DEFAULT 0");
+  }
+  if (await missingColumn("sales", "note")) {
     await native.execute("ALTER TABLE sales ADD COLUMN note TEXT");
   }
   if (await missingColumn("customers", "customer_type")) {
@@ -92,23 +96,30 @@ async function missingColumn(table: string, column: string): Promise<boolean> {
   return !cols.some((c) => c.name === column);
 }
 
-/** v3 product fields are plain nullable adds — no rebuild needed. */
+/** v3 product fields are plain nullable adds — no rebuild needed. Each column is
+ *  checked against the table's actual current columns (one read) so a run
+ *  interrupted partway through — power loss between two ALTERs — resumes
+ *  correctly next launch instead of either re-adding an existing column
+ *  ("duplicate column name") or, worse, silently never adding the rest. */
 async function addProductV3Columns(): Promise<void> {
-  const adds = [
-    "sku TEXT",
-    "family TEXT",
-    "brand TEXT",
-    "supplier TEXT",
-    "description TEXT",
-    "image TEXT",
-    "promo_price_pesewas INTEGER",
-    "bulk_price_pesewas INTEGER",
-    "bulk_min_qty INTEGER",
-    "expiry_date TEXT",
-    "batch_number TEXT",
+  const adds: [name: string, ddl: string][] = [
+    ["sku", "sku TEXT"],
+    ["family", "family TEXT"],
+    ["brand", "brand TEXT"],
+    ["supplier", "supplier TEXT"],
+    ["description", "description TEXT"],
+    ["image", "image TEXT"],
+    ["promo_price_pesewas", "promo_price_pesewas INTEGER"],
+    ["bulk_price_pesewas", "bulk_price_pesewas INTEGER"],
+    ["bulk_min_qty", "bulk_min_qty INTEGER"],
+    ["expiry_date", "expiry_date TEXT"],
+    ["batch_number", "batch_number TEXT"],
   ];
-  for (const col of adds) {
-    await native.execute(`ALTER TABLE products ADD COLUMN ${col}`);
+  const existing = new Set(
+    (await native.select<{ name: string }>("PRAGMA table_info(products)")).map((c) => c.name)
+  );
+  for (const [name, ddl] of adds) {
+    if (!existing.has(name)) await native.execute(`ALTER TABLE products ADD COLUMN ${ddl}`);
   }
 }
 
@@ -151,8 +162,12 @@ async function rebuildSaleItemsForV3(): Promise<void> {
   } catch (e) {
     await native.execute("ROLLBACK");
     throw e;
+  } finally {
+    // Always restore FK enforcement, even on failure — otherwise a rebuild
+    // error silently leaves referential integrity unchecked for the rest of
+    // the session instead of failing loudly.
+    await native.execute("PRAGMA foreign_keys = ON");
   }
-  await native.execute("PRAGMA foreign_keys = ON");
 }
 
 /** Rebuild stock_movements with the v3 reason list + prev/new stock + note.
@@ -191,8 +206,9 @@ async function rebuildMovementsForV3(): Promise<void> {
   } catch (e) {
     await native.execute("ROLLBACK");
     throw e;
+  } finally {
+    await native.execute("PRAGMA foreign_keys = ON");
   }
-  await native.execute("PRAGMA foreign_keys = ON");
 }
 
 /** Rebuild `sales` with the v2 columns + widened payment_method CHECK, preserving
@@ -241,6 +257,7 @@ async function rebuildSalesForV2(): Promise<void> {
   } catch (e) {
     await native.execute("ROLLBACK");
     throw e;
+  } finally {
+    await native.execute("PRAGMA foreign_keys = ON");
   }
-  await native.execute("PRAGMA foreign_keys = ON");
 }

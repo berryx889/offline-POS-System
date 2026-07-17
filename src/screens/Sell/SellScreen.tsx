@@ -54,13 +54,16 @@ export function SellScreen() {
   const setWholesaleMode = useCart((s) => s.setWholesaleMode);
   const restore = useCart((s) => s.restore);
 
-  const { data: held = [] } = useQuery({ queryKey: ["held-sales"], queryFn: listHeld });
-
   // Tax (v3 §10): optional flat rate from Settings, added on top of the discounted
   // subtotal. 0 (the default) hides it everywhere.
   const taxRatePercent = Math.max(0, parseFloat(settings?.tax_rate_percent ?? "0") || 0);
   const taxPesewas = Math.round(total * (taxRatePercent / 100));
   const grandTotal = total + taxPesewas;
+
+  const { data: held = [] } = useQuery({
+    queryKey: ["held-sales", taxRatePercent],
+    queryFn: () => listHeld(taxRatePercent),
+  });
 
   const focusScan = () => scanRef.current?.focus();
   const openTender = () => {

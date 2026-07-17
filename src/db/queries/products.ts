@@ -32,7 +32,10 @@ export interface Product {
   active: number;
 }
 
-const SELECT_PRODUCT = `
+// Exported so every Product-returning query (including analytics.ts) selects
+// the same columns — a query with its own hand-copied list silently drifts out
+// of sync with the Product type the next time a column is added.
+export const SELECT_PRODUCT = `
   SELECT p.id, p.name, p.barcode, p.sku, p.family, p.brand, p.supplier, p.description,
          p.image, p.category_id, c.name AS category_name, p.pieces_per_box,
          p.retail_price_pesewas, p.wholesale_price_pesewas, p.promo_price_pesewas,

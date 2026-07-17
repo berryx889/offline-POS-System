@@ -256,8 +256,11 @@ export function TenderPanel({
                 const id = e.target.value ? Number(e.target.value) : null;
                 setCustomerId(id);
                 // Wholesale customers always get wholesale pricing (v3 §9 method 3).
+                // Unconditional set (not just the wholesale case) so picking a
+                // retail customer — or clearing back to none — correctly drops
+                // out of wholesale pricing instead of leaving it stuck on.
                 const picked = customers.find((c) => c.id === id);
-                if (picked?.customer_type === "wholesale") setWholesaleMode(true);
+                setWholesaleMode(picked?.customer_type === "wholesale");
               }}
               className="w-full rounded-lg border border-ink/15 bg-tape px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
             >

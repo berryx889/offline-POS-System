@@ -4,7 +4,7 @@
 
 import { native } from "@/native";
 import { todayStartISO, lastWeekSameDayRange } from "@/lib/dates";
-import type { Product } from "./products";
+import { SELECT_PRODUCT, type Product } from "./products";
 
 export interface TodaySummary {
   revenue: number;
@@ -84,11 +84,7 @@ export async function topProductsToday(limit = 10): Promise<TopProduct[]> {
 
 export async function lowStockProducts(): Promise<Product[]> {
   return native.select<Product>(
-    `SELECT p.id, p.name, p.barcode, p.category_id, c.name AS category_name, p.pieces_per_box,
-            p.retail_price_pesewas, p.wholesale_price_pesewas, p.cost_price_pesewas,
-            p.stock_pieces, p.low_stock_threshold, p.active
-       FROM products p
-       LEFT JOIN categories c ON c.id = p.category_id
+    `${SELECT_PRODUCT}
       WHERE p.active = 1 AND p.stock_pieces <= p.low_stock_threshold
       ORDER BY (p.stock_pieces * 1.0 / NULLIF(p.low_stock_threshold, 0)) ASC, p.name`
   );
