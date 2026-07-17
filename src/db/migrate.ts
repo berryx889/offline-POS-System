@@ -131,33 +131,39 @@ async function saleItemsHasUnitCheck(): Promise<boolean> {
   return row != null && row.sql.includes("CHECK");
 }
 
-/** Rebuild sale_items without the unit CHECK so custom selling-unit names can be
- *  snapshotted. Same table-rebuild pattern as v2: FK off, copy rows + ids, rename. */
-async function rebuildSaleItemsForV3(): Promise<void> {
+/** SQLite can't widen a CHECK or drop one via ALTER, so a schema change to an
+ *  existing constraint means: build the new shape as a temp table, copy the old
+ *  rows in, drop the old table, rename the temp one into place. Every v2/v3
+ *  rebuild (sales, sale_items, stock_movements) is this exact same shape with
+ *  FKs off and full rollback — written once here instead of three times so the
+ *  transaction-safety logic (and any future fix to it) only has to be right in
+ *  one place. */
+interface RebuildSpec {
+  /** Table being rebuilt in place. */
+  table: string;
+  /** Column definitions for the temp table (no `CREATE TABLE` wrapper). */
+  createColumns: string;
+  /** Destination column list for the copy — usually the temp table's own columns. */
+  insertColumns: string;
+  /** Source expression list for the copy — literals (e.g. `NULL`, `0`) fill columns
+   *  the old table didn't have. */
+  insertSelect: string;
+  /** Statements to run once the temp table has taken the original's name. */
+  afterRename: string[];
+}
+
+async function rebuildTable(spec: RebuildSpec): Promise<void> {
+  const tmp = `${spec.table}_rebuild`;
   await native.execute("PRAGMA foreign_keys = OFF");
   await native.execute("BEGIN IMMEDIATE");
   try {
-    await native.execute(`
-      CREATE TABLE sale_items_v3 (
-        id INTEGER PRIMARY KEY,
-        sale_id INTEGER NOT NULL REFERENCES sales(id),
-        product_id INTEGER NOT NULL REFERENCES products(id),
-        product_name TEXT NOT NULL,
-        unit TEXT NOT NULL,
-        qty INTEGER NOT NULL,
-        unit_price_pesewas INTEGER NOT NULL,
-        line_total_pesewas INTEGER NOT NULL,
-        pieces_deducted INTEGER NOT NULL
-      )`);
-    await native.execute(`
-      INSERT INTO sale_items_v3 (id, sale_id, product_id, product_name, unit, qty,
-        unit_price_pesewas, line_total_pesewas, pieces_deducted)
-      SELECT id, sale_id, product_id, product_name, unit, qty,
-        unit_price_pesewas, line_total_pesewas, pieces_deducted
-      FROM sale_items`);
-    await native.execute("DROP TABLE sale_items");
-    await native.execute("ALTER TABLE sale_items_v3 RENAME TO sale_items");
-    await native.execute("CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)");
+    await native.execute(`CREATE TABLE ${tmp} (${spec.createColumns})`);
+    await native.execute(
+      `INSERT INTO ${tmp} (${spec.insertColumns}) SELECT ${spec.insertSelect} FROM ${spec.table}`
+    );
+    await native.execute(`DROP TABLE ${spec.table}`);
+    await native.execute(`ALTER TABLE ${tmp} RENAME TO ${spec.table}`);
+    for (const stmt of spec.afterRename) await native.execute(stmt);
     await native.execute("COMMIT");
   } catch (e) {
     await native.execute("ROLLBACK");
@@ -170,94 +176,96 @@ async function rebuildSaleItemsForV3(): Promise<void> {
   }
 }
 
+/** Rebuild sale_items without the unit CHECK so custom selling-unit names can be
+ *  snapshotted. */
+async function rebuildSaleItemsForV3(): Promise<void> {
+  const columns =
+    "id, sale_id, product_id, product_name, unit, qty, unit_price_pesewas, " +
+    "line_total_pesewas, pieces_deducted";
+  await rebuildTable({
+    table: "sale_items",
+    createColumns: `
+      id INTEGER PRIMARY KEY,
+      sale_id INTEGER NOT NULL REFERENCES sales(id),
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      product_name TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      qty INTEGER NOT NULL,
+      unit_price_pesewas INTEGER NOT NULL,
+      line_total_pesewas INTEGER NOT NULL,
+      pieces_deducted INTEGER NOT NULL`,
+    insertColumns: columns,
+    insertSelect: columns,
+    afterRename: ["CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)"],
+  });
+}
+
 /** Rebuild stock_movements with the v3 reason list + prev/new stock + note.
  *  Old rows keep NULL prev/new (unknown at the time). */
 async function rebuildMovementsForV3(): Promise<void> {
-  await native.execute("PRAGMA foreign_keys = OFF");
-  await native.execute("BEGIN IMMEDIATE");
-  try {
-    await native.execute(`
-      CREATE TABLE stock_movements_v3 (
-        id INTEGER PRIMARY KEY,
-        product_id INTEGER NOT NULL REFERENCES products(id),
-        change_pieces INTEGER NOT NULL,
-        reason TEXT NOT NULL CHECK (reason IN
-          ('sale','void','restock','adjustment','purchase','return',
-           'damaged','expired','transfer','opening')),
-        reference_id INTEGER,
-        note TEXT,
-        prev_pieces INTEGER,
-        new_pieces INTEGER,
-        user_id INTEGER NOT NULL REFERENCES users(id),
-        created_at TEXT NOT NULL
-      )`);
-    await native.execute(`
-      INSERT INTO stock_movements_v3 (id, product_id, change_pieces, reason,
-        reference_id, note, prev_pieces, new_pieces, user_id, created_at)
-      SELECT id, product_id, change_pieces, reason, reference_id, NULL, NULL, NULL,
-        user_id, created_at
-      FROM stock_movements`);
-    await native.execute("DROP TABLE stock_movements");
-    await native.execute("ALTER TABLE stock_movements_v3 RENAME TO stock_movements");
-    await native.execute(
-      "CREATE INDEX IF NOT EXISTS idx_stock_moves_product ON stock_movements(product_id)"
-    );
-    await native.execute("COMMIT");
-  } catch (e) {
-    await native.execute("ROLLBACK");
-    throw e;
-  } finally {
-    await native.execute("PRAGMA foreign_keys = ON");
-  }
+  await rebuildTable({
+    table: "stock_movements",
+    createColumns: `
+      id INTEGER PRIMARY KEY,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      change_pieces INTEGER NOT NULL,
+      reason TEXT NOT NULL CHECK (reason IN
+        ('sale','void','restock','adjustment','purchase','return',
+         'damaged','expired','transfer','opening')),
+      reference_id INTEGER,
+      note TEXT,
+      prev_pieces INTEGER,
+      new_pieces INTEGER,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL`,
+    insertColumns:
+      "id, product_id, change_pieces, reason, reference_id, note, prev_pieces, new_pieces, user_id, created_at",
+    insertSelect:
+      "id, product_id, change_pieces, reason, reference_id, NULL, NULL, NULL, user_id, created_at",
+    afterRename: [
+      "CREATE INDEX IF NOT EXISTS idx_stock_moves_product ON stock_movements(product_id)",
+    ],
+  });
 }
 
 /** Rebuild `sales` with the v2 columns + widened payment_method CHECK, preserving
- *  all rows and ids. FK enforcement is off during the swap (standard SQLite
- *  table-rebuild); sale_items/stock_movements re-bind to the renamed table. */
+ *  all rows and ids; sale_items/stock_movements re-bind to the renamed table. */
 async function rebuildSalesForV2(): Promise<void> {
-  await native.execute("PRAGMA foreign_keys = OFF");
-  await native.execute("BEGIN IMMEDIATE");
-  try {
-    await native.execute(`
-      CREATE TABLE sales_v2 (
-        id INTEGER PRIMARY KEY,
-        receipt_no TEXT UNIQUE NOT NULL,
-        user_id INTEGER NOT NULL REFERENCES users(id),
-        subtotal_pesewas INTEGER NOT NULL,
-        discount_pesewas INTEGER NOT NULL DEFAULT 0,
-        total_pesewas INTEGER NOT NULL,
-        amount_paid_pesewas INTEGER NOT NULL,
-        change_pesewas INTEGER NOT NULL DEFAULT 0,
-        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','momo','split','credit')),
-        cash_part_pesewas INTEGER NOT NULL DEFAULT 0,
-        momo_part_pesewas INTEGER NOT NULL DEFAULT 0,
-        momo_reference TEXT,
-        status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed','voided')),
-        voided_by INTEGER REFERENCES users(id),
-        void_reason TEXT,
-        seq INTEGER NOT NULL,
-        created_at TEXT NOT NULL,
-        customer_id INTEGER REFERENCES customers(id),
-        credit_pesewas INTEGER NOT NULL DEFAULT 0
-      )`);
-    await native.execute(`
-      INSERT INTO sales_v2 (id, receipt_no, user_id, subtotal_pesewas, discount_pesewas,
-        total_pesewas, amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas,
-        momo_part_pesewas, momo_reference, status, voided_by, void_reason, seq, created_at,
-        customer_id, credit_pesewas)
-      SELECT id, receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas,
-        amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas, momo_part_pesewas,
-        momo_reference, status, voided_by, void_reason, seq, created_at, NULL, 0
-      FROM sales`);
-    await native.execute("DROP TABLE sales");
-    await native.execute("ALTER TABLE sales_v2 RENAME TO sales");
-    await native.execute("CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)");
-    await native.execute("CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(seq)");
-    await native.execute("COMMIT");
-  } catch (e) {
-    await native.execute("ROLLBACK");
-    throw e;
-  } finally {
-    await native.execute("PRAGMA foreign_keys = ON");
-  }
+  await rebuildTable({
+    table: "sales",
+    createColumns: `
+      id INTEGER PRIMARY KEY,
+      receipt_no TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      subtotal_pesewas INTEGER NOT NULL,
+      discount_pesewas INTEGER NOT NULL DEFAULT 0,
+      total_pesewas INTEGER NOT NULL,
+      amount_paid_pesewas INTEGER NOT NULL,
+      change_pesewas INTEGER NOT NULL DEFAULT 0,
+      payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','momo','split','credit')),
+      cash_part_pesewas INTEGER NOT NULL DEFAULT 0,
+      momo_part_pesewas INTEGER NOT NULL DEFAULT 0,
+      momo_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed','voided')),
+      voided_by INTEGER REFERENCES users(id),
+      void_reason TEXT,
+      seq INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      customer_id INTEGER REFERENCES customers(id),
+      credit_pesewas INTEGER NOT NULL DEFAULT 0`,
+    insertColumns:
+      "id, receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas, " +
+      "amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas, " +
+      "momo_part_pesewas, momo_reference, status, voided_by, void_reason, seq, created_at, " +
+      "customer_id, credit_pesewas",
+    insertSelect:
+      "id, receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas, " +
+      "amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas, " +
+      "momo_part_pesewas, momo_reference, status, voided_by, void_reason, seq, created_at, " +
+      "NULL, 0",
+    afterRename: [
+      "CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at)",
+      "CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(seq)",
+    ],
+  });
 }
