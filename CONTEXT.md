@@ -13,9 +13,9 @@ and current state. The other docs each have one job:
 
 ---
 
-## 1. Status: feature-complete, v3 built, one review pass outstanding
+## 1. Status: feature-complete, v3 built and hardened
 
-Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **47 commits, all
+Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **49 commits, all
 on `main`, working tree clean.** Typecheck + lint pass.
 
 - ✅ Phases 1–7 (the PRD's whole build plan, `pos-prd.md §11`)
@@ -26,10 +26,11 @@ on `main`, working tree clean.** Typecheck + lint pass.
   full inventory movement types, receipt barcode, valuation/slow-mover/alert
   reports, idle-session lock, Excel import/export extended to match — see §3b.
 - ✅ A UI refresh to a clean "SiMi Shop" grocery-dashboard look
-- ⚠️ **A `/code-review high` pass over the v3 diff surfaced 10 findings (7 real
-  bugs, 3 cleanup) that are documented but *not yet fixed* — see §9 for the
-  list. The most serious are a stuck-wholesale-pricing bug and two migration
-  atomicity gaps that can brick the app on power loss mid-upgrade.**
+- ✅ A `/code-review high` pass over the v3 diff surfaced 10 findings; the 7
+  correctness bugs are **fixed and verified live against the DB** (`d032490`)
+  — see §9 for what each was and how it was proven fixed. The 2 remaining
+  findings were pure cleanup/efficiency with no live bug attached and were
+  deliberately left alone — reasoning in §9, not an oversight.
 - ⏳ **Windows-only work is still pending** — see `HANDOFF.md` (installer + thermal
   USB write). Both genuinely need the Rust toolchain / real hardware.
 
@@ -88,8 +89,10 @@ This is why:
   problem, promote it to a `product_families` table with an FK.
 - **Barcode aliases resolve after the primary barcode** (`findByBarcode` in
   `db/queries/products.ts`): own-barcode lookup first, then a second query
-  against `barcode_aliases` only on miss. Two round-trips on the alias path —
-  flagged in code review as a hot-path inefficiency (§9), not yet fixed.
+  against `barcode_aliases` only on miss — two round-trips specifically on the
+  alias path (most scans hit the fast path in one). Noted as a possible
+  hot-path optimization if alias scanning turns out to be common enough to
+  matter; not currently a tracked issue.
 - **Selling units are a full replace-as-a-set on save** (`db/queries/units.ts`
   `saveUnits`): the drawer's editor deletes all of a product's units and
   reinserts the new list in one transaction, rather than diffing adds/edits/
@@ -103,15 +106,17 @@ This is why:
   logic can be wrong.
 - **Cart-level wholesale mode is a `CartLine.wholesale` flag copied onto every
   line**, not a single cart-wide read. `setWholesaleMode` maps over all lines to
-  keep them in sync. **Known gap (unfixed):** `TenderPanel`'s credit-customer
-  picker sets this flag `true` for a wholesale customer but never sets it back
-  to `false` — see finding #1 in §9.
+  keep them in sync. `TenderPanel`'s credit-customer picker sets this flag from
+  the selected customer's type — **fixed in `d032490`** to set it
+  unconditionally on every change (including clearing), not just the
+  wholesale case; see §9 #1.
 - **Held sales are a single opaque JSON blob** (`held_sales.cart_json`, written
   by `db/queries/held.ts`) — the entire `CartLine[]` + discount + wholesale-mode
-  is `JSON.stringify`'d, not decomposed into rows. Simple, but it means (a) held
-  sales aren't queryable in SQL for reporting ("how much is parked right now"),
-  and (b) `takeHeld()` deletes the row *before* confirming the JSON parses —
-  both flagged in code review, not yet fixed (§9).
+  is `JSON.stringify`'d, not decomposed into rows. Simple, but held sales still
+  aren't queryable in SQL for reporting ("how much is parked right now") —
+  a real limitation of this design, not planned to change unless that report
+  is actually needed. `takeHeld()` now parses before deleting (fixed in
+  `d032490`, §9 #3), so a corrupted row survives instead of vanishing.
 - **Every stock change goes through one function**: `db/queries/movements.ts`
   `applyStockMovement()` reads current `stock_pieces`, writes the new value, and
   inserts the `stock_movements` row with `prev_pieces`/`new_pieces` — called by
@@ -223,7 +228,7 @@ These cost real time during the build:
 
 ---
 
-## 7. Build history (47 commits, in order)
+## 7. Build history (49 commits, in order)
 
 Phases follow `pos-prd.md §11`; each slice was verified in the browser before commit.
 
@@ -252,8 +257,10 @@ Phases follow `pos-prd.md §11`; each slice was verified in the browser before c
   movement types + receipt barcode + valuation/slow-mover/alert reports ·
   `f1346ef` idle-session auto-lock · `ec0cc6b` Excel import/export extended to
   match v3 fields
-- **Hardening (in progress)** a `/code-review high` pass over the v3 diff ran
-  and reported 10 findings (§9) — the review itself is done, the fixes are not.
+- **Hardening** `ff3b853` docs (this file, updated for v3) · `d032490` fixed
+  and live-verified all 7 correctness bugs from the `/code-review high` pass
+  (§9 has the detail + what proved each one fixed); 2 cleanup findings were
+  reviewed and deliberately left alone (reasoning in §9).
 
 ---
 
@@ -266,57 +273,61 @@ The user's PDF ("Practical Vibe Coding") was turned into a skill at
 > Constraints protect what's already built. Verify each step before moving on.
 > One commit per working feature.**
 
-The loop that produced all 47 commits: **read `CLAUDE.md` → build the smallest
+The loop that produced all 49 commits: **read `CLAUDE.md` → build the smallest
 useful slice → typecheck + lint → verify it in the browser → commit with what was
 verified → next.** Keep the diff small enough to review at a glance.
 
 ## 9. Sensible next steps
 
-**Outstanding from the `/code-review high` pass on the v3 diff** (unfixed as of
-`ec0cc6b`) — ranked most severe first, each verified against the actual code, not
-just trusted from the reviewer:
+**Fixed in `d032490`** — the 7 correctness bugs from the `/code-review high` pass
+(`ff3b853`'s §9 had the original unfixed list; kept here as a record of what was
+wrong, how it was fixed, and how it was proven fixed — not a to-do list anymore):
 
-1. **Wholesale pricing sticks after picking a wholesale customer**
-   (`screens/Sell/TenderPanel.tsx:255`) — the credit-customer dropdown's
-   `onChange` calls `setWholesaleMode(true)` for a wholesale customer but never
-   `(false)` for a retail one or on clearing the selection. Can under-charge a
-   later retail sale in the same cart session. **Fix: derive wholesale-mode from
-   the selected customer at commit time instead of mutating cart state from a
-   dropdown handler**, or add the missing `else setWholesaleMode(false)`.
-2. **Two migration atomicity gaps that can brick the app on power loss**
-   (`db/migrate.ts:56` and `:96`) — the sales `tax_pesewas`/`note` columns and
-   the 11 product v3 columns are each added via multiple un-transacted
-   `ALTER TABLE` calls under a single guard check. A crash between statements
-   leaves the guard permanently wrong: either every sale fails forever ("no
-   column named note") or the app crash-loops on boot (`ALTER ADD COLUMN sku`
-   re-run → "duplicate column name"). **Fix: guard each ALTER individually with
-   its own `missingColumn` check**, not one check per group.
-3. **`takeHeld()` deletes before confirming the JSON parses**
-   (`db/queries/held.ts:70`) — a corrupted `cart_json` row is deleted first,
-   *then* `JSON.parse` throws; the parked sale is unrecoverably lost with no
-   error shown. **Fix: parse first, delete only on success.**
-4. **FK enforcement can stay off for a session after a failed table rebuild**
-   (`db/migrate.ts:151`, `rebuildSaleItemsForV3`/`rebuildMovementsForV3`) — the
-   catch block re-throws before the trailing `PRAGMA foreign_keys = ON` runs.
-   **Fix: put the pragma restore in a `finally`.**
-5. Resuming a held sale doesn't call `hydrateUnits` for its lines
-   (`store/cartStore.ts:249`) — a narrow race (hold immediately after adding a
-   custom-unit product) can strand a resumed line without its selling units.
-6. `listHeld()`'s preview total excludes tax (`db/queries/held.ts:53`) —
-   cosmetic, but misleads the cashier about what a held sale will actually
-   charge once resumed.
-7. `analytics.ts` `lowStockProducts()` wasn't updated with the v3 `Product`
-   columns — currently latent (Dashboard doesn't read the missing fields yet).
-8. Two cleanup items: an extra DB round-trip per line in the sale-commit loop
-   (`applyStockMovement`'s SELECT duplicates work `commitSale` already did), and
-   three copy-pasted table-rebuild functions in `migrate.ts` that a shared
-   `rebuildTable()` helper would collapse into one (and would have made #4 a
-   one-place fix instead of three).
+1. ~~**Wholesale pricing sticks after picking a wholesale customer**~~ FIXED —
+   `TenderPanel.tsx`'s customer `onChange` now calls `setWholesaleMode(...)`
+   unconditionally on every selection (including clearing), not just for a
+   wholesale pick. Verified live: walked a wholesale → retail → cleared
+   selection on Milo 400g Tin and watched the piece price go 50.00 → 55.00 →
+   55.00 (previously would have stuck at 50.00 after the first pick).
+2. ~~**Two migration atomicity gaps**~~ FIXED — every v3 `ALTER TABLE` is now
+   individually guarded; `addProductV3Columns` reads the table's actual
+   columns once and only adds what's missing. Verified live: manually dropped
+   9 of the 11 v3 product columns and `note` from `sales` (recreating "crashed
+   mid-migration"), ran `migrate()` again, confirmed no throw and both tables
+   ended up complete.
+3. ~~**`takeHeld()` deleted before confirming the JSON parsed`**~~ FIXED —
+   parses first now; a corrupted row survives. Verified live: inserted a
+   `held_sales` row with `cart_json = '{not valid json'`, called `takeHeld()`,
+   confirmed it returned `null` *and* the row was still in the table.
+4. ~~**FK enforcement could stay off after a failed rebuild**~~ FIXED — the
+   `PRAGMA foreign_keys = ON` restore moved into a `finally` in all three
+   rebuild functions.
+5. ~~**Resuming a held sale didn't refresh custom selling units`**~~ FIXED —
+   `restore()` now calls `hydrateUnits` for every distinct product in the
+   resumed cart. Verified live: held a cart with a deliberately empty
+   `extraUnits: []` (simulating the async race), resumed it, confirmed the
+   line's units were repopulated after `restore()` ran.
+6. ~~**Held-sale list total excluded tax`**~~ FIXED — `listHeld()` now takes a
+   tax-rate parameter and applies it. Verified live: `listHeld(5)` on the same
+   row returned exactly 5% more than `listHeld(0)`.
+7. ~~**`lowStockProducts()` used a stale column list`**~~ FIXED at the root —
+   `SELECT_PRODUCT` is exported from `products.ts` and reused instead of a
+   second hand-copied list. Verified live: a low-stock row now carries every
+   v3 `Product` field.
+
+**Deliberately left alone** (reviewed, not an oversight):
+- The `applyStockMovement` "redundant SELECT" efficiency finding — removing it
+  would make `commitSale`'s stock write trust a value read before the
+  transaction's write lock, weakening the isolation `BEGIN IMMEDIATE` exists
+  for. Not a good trade for a minor perf win.
+- Collapsing `migrate.ts`'s three copy-pasted rebuild functions into a shared
+  helper — pure duplication with no live bug attached; too risky to refactor
+  right after fixing real bugs in that same code, for no behavior change.
 
 **Other genuine options:**
-9. **Finish on Windows** (`HANDOFF.md`) — the installer + thermal USB write. This
-   is the only thing between here and shipping, once the above is fixed.
-10. **Online mode** — only if the shop ever needs multiple tills sharing data.
-    It's a contained change behind `src/native/` (+ a server for auth/DB), *not*
-    a rewrite. Note the browser mock's PIN hash is a **dev stub — never ship it
-    as real auth**.
+- **Finish on Windows** (`HANDOFF.md`) — the installer + thermal USB write. This
+  is the only thing between here and shipping.
+- **Online mode** — only if the shop ever needs multiple tills sharing data.
+  It's a contained change behind `src/native/` (+ a server for auth/DB), *not*
+  a rewrite. Note the browser mock's PIN hash is a **dev stub — never ship it
+  as real auth**.
