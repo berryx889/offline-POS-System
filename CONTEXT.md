@@ -15,7 +15,7 @@ and current state. The other docs each have one job:
 
 ## 1. Status: feature-complete, v3 built and hardened
 
-Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **49 commits, all
+Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **52 commits, all
 on `main`, working tree clean.** Typecheck + lint pass.
 
 - ✅ Phases 1–7 (the PRD's whole build plan, `pos-prd.md §11`)
@@ -26,11 +26,12 @@ on `main`, working tree clean.** Typecheck + lint pass.
   full inventory movement types, receipt barcode, valuation/slow-mover/alert
   reports, idle-session lock, Excel import/export extended to match — see §3b.
 - ✅ A UI refresh to a clean "SiMi Shop" grocery-dashboard look
-- ✅ A `/code-review high` pass over the v3 diff surfaced 10 findings; the 7
-  correctness bugs are **fixed and verified live against the DB** (`d032490`)
-  — see §9 for what each was and how it was proven fixed. The 2 remaining
-  findings were pure cleanup/efficiency with no live bug attached and were
-  deliberately left alone — reasoning in §9, not an oversight.
+- ✅ A `/code-review high` pass over the v3 diff surfaced 10 findings; all 9
+  worth fixing are **fixed and verified live against the DB** (`d032490`,
+  `9bf0e13`) — see §9 for what each was and how it was proven fixed. 1 finding
+  (a redundant-SELECT "optimization") was reviewed and deliberately left
+  alone — it would trade away a transaction-isolation guarantee for a minor
+  perf win; reasoning in §9, not an oversight.
 - ⏳ **Windows-only work is still pending** — see `HANDOFF.md` (installer + thermal
   USB write). Both genuinely need the Rust toolchain / real hardware.
 
@@ -225,10 +226,21 @@ These cost real time during the build:
     the wakeup/notification chain (background bash → task notification → tool
     call) that can eat several seconds of margin. Give timer-based features at
     least 15–20% headroom when verifying, not the exact threshold.
+12. **The dev sql.js WASM build never actually enforces foreign keys**, even
+    though `mock.ts` runs `PRAGMA foreign_keys = ON` at connection-open and
+    `migrate.ts` explicitly toggles it around every table rebuild. Confirmed
+    two ways: `PRAGMA foreign_keys` always reads back `0` no matter what was
+    just set, and — more importantly — inserting a row with a nonexistent
+    `product_id` succeeds silently on a completely fresh DB, before any app
+    code has touched the pragma at all. This is a property of the bundled
+    WASM binary (same shape as the FTS5 gotcha, §3), not a bug in this app's
+    code — the pragma calls are still correct and still matter on the real
+    Tauri/SQLite build. Don't try to verify FK enforcement by testing it live
+    in dev; it will always look broken regardless of the actual code.
 
 ---
 
-## 7. Build history (49 commits, in order)
+## 7. Build history (52 commits, in order)
 
 Phases follow `pos-prd.md §11`; each slice was verified in the browser before commit.
 
@@ -258,9 +270,11 @@ Phases follow `pos-prd.md §11`; each slice was verified in the browser before c
   `f1346ef` idle-session auto-lock · `ec0cc6b` Excel import/export extended to
   match v3 fields
 - **Hardening** `ff3b853` docs (this file, updated for v3) · `d032490` fixed
-  and live-verified all 7 correctness bugs from the `/code-review high` pass
-  (§9 has the detail + what proved each one fixed); 2 cleanup findings were
-  reviewed and deliberately left alone (reasoning in §9).
+  and live-verified all 7 correctness bugs from the `/code-review high` pass ·
+  `9bf0e13` collapsed the migrate.ts rebuild duplication (initially skipped,
+  revisited after the FK-restore fix proved the risk of 3 copies was real) —
+  §9 has the detail + what proved each fix correct; 1 finding (a redundant-
+  SELECT "optimization") was reviewed and deliberately left alone.
 
 ---
 
@@ -273,7 +287,7 @@ The user's PDF ("Practical Vibe Coding") was turned into a skill at
 > Constraints protect what's already built. Verify each step before moving on.
 > One commit per working feature.**
 
-The loop that produced all 49 commits: **read `CLAUDE.md` → build the smallest
+The loop that produced all 52 commits: **read `CLAUDE.md` → build the smallest
 useful slice → typecheck + lint → verify it in the browser → commit with what was
 verified → next.** Keep the diff small enough to review at a glance.
 
@@ -315,14 +329,24 @@ wrong, how it was fixed, and how it was proven fixed — not a to-do list anymor
    second hand-copied list. Verified live: a low-stock row now carries every
    v3 `Product` field.
 
+**Also done since (`9bf0e13`):** the `migrate.ts` rebuild-function dedup
+(originally listed above as deliberately skipped) was revisited and applied —
+`rebuildTable()` is now the one shared implementation `rebuildSalesForV2`/
+`rebuildSaleItemsForV3`/`rebuildMovementsForV3` each call with just their own
+DDL/column-list data. Verified live and thoroughly, since a bug here corrupts
+real sale history: took a DB with a real committed sale (with a note, a
+sale_item, a stock_movement), manually downgraded all three tables back to
+their pre-rebuild shapes (dropped the v3 columns, restored the old narrower
+CHECK on `sale_items`), ran `migrate()` again, and confirmed all three tables
+came back to the v3 shape with the original row data byte-for-byte intact
+(same receipt number, product name, qty, unit, change_pieces). See gotcha #12
+(§6) for an incidental discovery made while verifying this.
+
 **Deliberately left alone** (reviewed, not an oversight):
 - The `applyStockMovement` "redundant SELECT" efficiency finding — removing it
   would make `commitSale`'s stock write trust a value read before the
   transaction's write lock, weakening the isolation `BEGIN IMMEDIATE` exists
   for. Not a good trade for a minor perf win.
-- Collapsing `migrate.ts`'s three copy-pasted rebuild functions into a shared
-  helper — pure duplication with no live bug attached; too risky to refactor
-  right after fixing real bugs in that same code, for no behavior change.
 
 **Other genuine options:**
 - **Finish on Windows** (`HANDOFF.md`) — the installer + thermal USB write. This
