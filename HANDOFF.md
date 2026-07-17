@@ -32,83 +32,62 @@ First login uses the seeded accounts (change them in Settings):
 
 ## 2. Remaining on-device tasks
 
-### 2.1 Build the installer
+### 2.1 Generate real icons (blocks `tauri dev` too, not just the build)
 
 ```bash
 npm run tauri icon path/to/logo.png   # once — generates src-tauri/icons/*
-npm run tauri build                    # -> .msi and .exe in src-tauri/target/release/bundle/
+```
+
+`tauri.conf.json` already points at `src-tauri/icons/{32x32,128x128,128x128@2x}.png`
+and `icon.ico`, and **`cargo check`/`tauri dev` fail outright without them** —
+`tauri::generate_context!()` opens the icon files at compile time, not just at
+bundle time. `src-tauri/icons/` is gitignored on purpose (see 2.2) — there is
+nothing there until you run this.
+
+### 2.2 Build the installer
+
+```bash
+npm run tauri build   # -> .msi and .exe in src-tauri/target/release/bundle/
 ```
 
 Targets (`msi`, `nsis`) are already set in `src-tauri/tauri.conf.json`. Auto-update
 is off (offline app).
 
-### 2.2 Thermal USB write (the one real stub)
+### 2.3 Thermal USB write — code is written, **compiles on macOS, unverified on Windows**
 
-`print_receipt` in `src-tauri/src/lib.rs` currently logs the bytes and returns Ok,
-so sales print through the **OS dialog with the HTML receipt** — a first-class
-fallback per the PRD. To drive a thermal printer directly, send the ESC/POS bytes
-to the installed printer via the Windows spooler (raw passthrough). Reference
-implementation to adapt and verify on-device (add the `windows` crate under
-`[target.'cfg(windows)'.dependencies]` with the `Win32_Graphics_Printing` and
-`Win32_Foundation` features):
+`print_receipt` and `open_cash_drawer` in `src-tauri/src/lib.rs` now call
+`write_raw()` (Windows spooler RAW passthrough) when a printer name is configured
+and the build target is Windows; the `windows` crate is pinned in
+`src-tauri/Cargo.toml` under `[target.'cfg(windows)'.dependencies]`, version
+`"0.58"`, with `Win32_Graphics_Printing` + `Win32_Foundation`. `Cargo.lock` is
+committed so this resolves to the exact same versions when you build.
 
-```rust
-#[cfg(target_os = "windows")]
-fn write_raw(printer: &str, bytes: &[u8]) -> Result<(), String> {
-    use windows::core::PCWSTR;
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::Graphics::Printing::{
-        ClosePrinter, EndDocPrinter, EndPagePrinter, OpenPrinterW, StartDocPrinterW,
-        StartPagePrinter, WritePrinter, DOC_INFO_1W,
-    };
+**This was written and reasoned through carefully, but never compiled for
+Windows** — there's no Windows machine in the environment it was written in, so
+`cargo check`/`cargo build` only ran (cleanly) against the non-Windows code
+path. The `windows` crate's exact function/struct signatures drift across
+versions; if `cargo build` on your machine fails inside `write_raw`, that's an
+expected first-contact issue, not a sign something else is wrong — adjust the
+call to match whatever `0.58` (or the version that actually resolves) exposes,
+or bump the pin. **First step on the Windows box: `cd src-tauri && cargo build`
+before anything else**, so a signature mismatch surfaces immediately instead of
+mid-testing.
 
-    let mut name: Vec<u16> = printer.encode_utf16().chain([0]).collect();
-    let mut raw: Vec<u16> = "RAW".encode_utf16().chain([0]).collect();
-    let mut doc: Vec<u16> = "CounterTop receipt".encode_utf16().chain([0]).collect();
+Fallback behavior is unchanged and still the safety net: no printer name
+configured, or a non-Windows build → logs and returns `Ok`, so sales print
+through the OS dialog / HTML receipt fallback. **A print failure still never
+blocks a committed sale** — `write_raw`'s `Err` only reaches the frontend's
+existing HTML-fallback catch in `receipt/print.ts`, it doesn't propagate
+anywhere that could fail a sale.
 
-    unsafe {
-        let mut h = HANDLE::default();
-        OpenPrinterW(PCWSTR(name.as_mut_ptr()), &mut h, None).map_err(|e| e.to_string())?;
-
-        let info = DOC_INFO_1W {
-            pDocName: PCWSTR(doc.as_mut_ptr()),
-            pOutputFile: PCWSTR::null(),
-            pDatatype: PCWSTR(raw.as_mut_ptr()),
-        };
-        // Level 1. StartDocPrinterW returns a job id (0 = failure).
-        if StartDocPrinterW(h, 1, &info) == 0 {
-            let _ = ClosePrinter(h);
-            return Err("StartDocPrinter failed".into());
-        }
-        StartPagePrinter(h).map_err(|e| e.to_string())?;
-
-        let mut written = 0u32;
-        WritePrinter(h, bytes.as_ptr() as _, bytes.len() as u32, &mut written)
-            .map_err(|e| e.to_string())?;
-
-        let _ = EndPagePrinter(h);
-        let _ = EndDocPrinter(h);
-        let _ = ClosePrinter(h);
-    }
-    Ok(())
-}
-```
-
-Then have the `print_receipt` command call `write_raw(name, &bytes)` when a printer
-name is provided, keeping the current `Ok` behavior as the fallback so **a print
-failure never blocks a committed sale**. The `windows` crate's exact function
-signatures drift between versions — compile against the version you pin and adjust
-if needed. The cash-drawer pulse (`open_cash_drawer`) uses the same path with the
-ESC `p` kick bytes.
-
-### 2.3 Confirm the backup DB path
+### 2.4 Confirm the backup DB path
 
 `src/native/tauri.ts` reads/writes `pos.db` in `appConfigDir()`. Verify the
 `tauri-plugin-sql` database actually resolves there on your build (do one
 **Back up now** → check the `.ctbk` file, then **Restore** it). If the plugin puts
 the file elsewhere, that one path string is the only change.
 
-### 2.4 FTS5
+### 2.5 FTS5
 
 Nothing to do — the bundled SQLite includes FTS5, so `setupFts()` (in
 `src/db/fts.ts`) succeeds automatically and search uses the index. (The dev sql.js
@@ -120,6 +99,9 @@ build lacks FTS5 and falls back to LIKE; same results, just slower.)
 
 Run these on the real machine with Wi-Fi off and Ethernet unplugged:
 
+- [ ] `cd src-tauri && cargo build` succeeds — the thermal-printing code (2.3)
+      has never been compiled for Windows; this is the first real signal it's
+      syntactically correct for the `windows` crate version that resolves.
 - [ ] Log in, scan 5 items, sell 2 as boxes, take a split cash/MoMo payment, print
       the receipt, and watch the dashboard update.
 - [ ] Kill power mid-payment; on restart the sale exists fully (reprintable) or not

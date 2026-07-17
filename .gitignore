@@ -4,6 +4,10 @@ node_modules/
 dist/
 # rust / tauri
 src-tauri/target/
+src-tauri/gen/
+# placeholder-only until HANDOFF.md §2.1's `npm run tauri icon <real logo>` runs —
+# never commit these, they're a plain green square, not the app's branding
+src-tauri/icons/
 # env
 .env
 # os

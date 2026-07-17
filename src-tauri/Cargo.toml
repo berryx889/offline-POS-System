@@ -23,6 +23,12 @@ serde_json = "1"
 argon2 = "0.5"
 rand = "0.8"
 
+# Raw ESC/POS passthrough to a thermal printer via the Windows spooler
+# (src/lib.rs write_raw). Windows-only — never built on macOS/Linux, so it
+# can't affect the dev workflow this project is built and tested against.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_Graphics_Printing", "Win32_Foundation"] }
+
 [features]
 # This feature is used for production builds where `devUrl` is not needed.
 custom-protocol = ["tauri/custom-protocol"]
