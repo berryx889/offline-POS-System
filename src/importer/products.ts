@@ -11,26 +11,46 @@ const HEADERS = [
   "name",
   "barcode",
   "category",
+  "family",
+  "brand",
+  "supplier",
+  "sku",
+  "description",
   "pieces_per_box",
   "retail_price",
   "wholesale_price",
+  "promo_price",
+  "bulk_price",
+  "bulk_min_qty",
   "cost_price",
   "opening_stock",
   "low_stock_threshold",
+  "expiry_date",
+  "batch_number",
 ] as const;
 
 /** Download an .xlsx template with the expected headers and one example row. */
 export function downloadTemplate(): void {
   const example = {
-    name: "Example — Milo Sachet",
+    name: "Example — Milo 400g Tin",
     barcode: "6009888112233",
     category: "Beverages",
-    pieces_per_box: 48,
-    retail_price: 0.6,
-    wholesale_price: 26,
-    cost_price: 0.43,
+    family: "Milo",
+    brand: "Nestlé",
+    supplier: "",
+    sku: "",
+    description: "",
+    pieces_per_box: 12,
+    retail_price: 5.5,
+    wholesale_price: 60,
+    promo_price: "",
+    bulk_price: 5,
+    bulk_min_qty: 12,
+    cost_price: 4.3,
     opening_stock: 100,
     low_stock_threshold: 20,
+    expiry_date: "",
+    batch_number: "",
   };
   const ws = XLSX.utils.json_to_sheet([example], { header: HEADERS as unknown as string[] });
   const wb = XLSX.utils.book_new();
@@ -43,12 +63,22 @@ export interface ParsedRow {
   name: string;
   barcode: string | null;
   category: string;
+  family: string | null;
+  brand: string | null;
+  supplier: string | null;
+  sku: string | null;
+  description: string | null;
   piecesPerBox: number;
   retailPesewas: number;
   wholesalePesewas: number | null;
+  promoPesewas: number | null;
+  bulkPesewas: number | null;
+  bulkMinQty: number | null;
   costPesewas: number | null;
   openingStock: number;
   threshold: number;
+  expiryDate: string | null;
+  batchNumber: string | null;
   errors: string[];
 }
 
@@ -102,18 +132,36 @@ export async function parseWorkbook(file: File): Promise<ParsedRow[]> {
     const wholesale = String(wholesaleRaw ?? "").trim() ? num(wholesaleRaw) : NaN;
     const costRaw = row.cost_price;
     const cost = String(costRaw ?? "").trim() ? num(costRaw) : NaN;
+    const promoRaw = row.promo_price;
+    const promo = String(promoRaw ?? "").trim() ? num(promoRaw) : NaN;
+    const bulkRaw = row.bulk_price;
+    const bulk = String(bulkRaw ?? "").trim() ? num(bulkRaw) : NaN;
+    const bulkMinRaw = row.bulk_min_qty;
+    const bulkMinQty = isFinite(bulk) ? Math.max(2, Math.floor(num(bulkMinRaw) || 12)) : null;
+
+    const str = (v: unknown) => String(v ?? "").trim() || null;
 
     return {
       rowNum: i + 2, // +1 for header, +1 for 1-based
       name,
       barcode,
       category: String(row.category ?? "").trim(),
+      family: str(row.family),
+      brand: str(row.brand),
+      supplier: str(row.supplier),
+      sku: str(row.sku),
+      description: str(row.description),
       piecesPerBox,
       retailPesewas: isFinite(retail) ? toPesewas(retail) : 0,
       wholesalePesewas: isFinite(wholesale) ? toPesewas(wholesale) : null,
+      promoPesewas: isFinite(promo) ? toPesewas(promo) : null,
+      bulkPesewas: isFinite(bulk) ? toPesewas(bulk) : null,
+      bulkMinQty,
       costPesewas: isFinite(cost) ? toPesewas(cost) : null,
       openingStock: Math.max(0, Math.floor(num(row.opening_stock) || 0)),
       threshold: Math.max(0, Math.floor(num(row.low_stock_threshold) || 10)),
+      expiryDate: str(row.expiry_date),
+      batchNumber: str(row.batch_number),
       errors,
     };
   });
@@ -134,23 +182,23 @@ export async function commitRows(rows: ParsedRow[], userId: number): Promise<num
     const input: ProductInput = {
       name: r.name,
       barcode: r.barcode,
-      sku: null,
-      family: null,
-      brand: null,
-      supplier: null,
-      description: null,
+      sku: r.sku,
+      family: r.family,
+      brand: r.brand,
+      supplier: r.supplier,
+      description: r.description,
       image: null,
       category_id: categoryId,
       pieces_per_box: r.piecesPerBox,
       retail_price_pesewas: r.retailPesewas,
       wholesale_price_pesewas: r.wholesalePesewas,
-      promo_price_pesewas: null,
-      bulk_price_pesewas: null,
-      bulk_min_qty: null,
+      promo_price_pesewas: r.promoPesewas,
+      bulk_price_pesewas: r.bulkPesewas,
+      bulk_min_qty: r.bulkMinQty,
       cost_price_pesewas: r.costPesewas,
       low_stock_threshold: r.threshold,
-      expiry_date: null,
-      batch_number: null,
+      expiry_date: r.expiryDate,
+      batch_number: r.batchNumber,
     };
     await createProduct(input, r.openingStock, userId);
     imported++;

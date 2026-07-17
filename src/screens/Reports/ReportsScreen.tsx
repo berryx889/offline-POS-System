@@ -68,7 +68,17 @@ export function ReportsScreen() {
 
   function exportExcel() {
     if (!summary) return;
-    exportReportsToExcel({ rangeLabel: label, summary, byProduct, byCategory, byCashier, voided });
+    exportReportsToExcel({
+      rangeLabel: label,
+      summary,
+      byProduct,
+      byCategory,
+      byCashier,
+      voided,
+      valuation: valuation ?? { rows: [], totalCost: 0, totalRetail: 0 },
+      slowMovers: slow,
+      stockAlerts: alerts ?? { low: [], out: [] },
+    });
   }
 
   return (

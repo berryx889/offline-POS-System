@@ -8,6 +8,9 @@ import type {
   CategoryRow,
   CashierRow,
   VoidedRow,
+  ValuationRow,
+  SlowMoverRow,
+  StockAlertRow,
 } from "@/db/queries/reports";
 
 const ghs = (pesewas: number) => Number((pesewas / 100).toFixed(2));
@@ -19,6 +22,9 @@ export interface ReportBundle {
   byCategory: CategoryRow[];
   byCashier: CashierRow[];
   voided: VoidedRow[];
+  valuation: { rows: ValuationRow[]; totalCost: number; totalRetail: number };
+  slowMovers: SlowMoverRow[];
+  stockAlerts: { low: StockAlertRow[]; out: StockAlertRow[] };
 }
 
 export function exportReportsToExcel(data: ReportBundle): void {
@@ -28,6 +34,7 @@ export function exportReportsToExcel(data: ReportBundle): void {
     { Metric: "Period", Value: data.rangeLabel },
     { Metric: "Sales", Value: data.summary.count },
     { Metric: "Revenue (GHS)", Value: ghs(data.summary.revenue) },
+    { Metric: "  of which tax (GHS)", Value: ghs(data.summary.taxTotal) },
     { Metric: "Average sale (GHS)", Value: ghs(data.summary.avgSale) },
     { Metric: "Gross profit (GHS)", Value: ghs(data.summary.profit) },
     { Metric: "Cash (GHS)", Value: ghs(data.summary.cashTotal) },
@@ -66,6 +73,38 @@ export function exportReportsToExcel(data: ReportBundle): void {
       "Total (GHS)": ghs(r.total_pesewas),
       Date: new Date(r.created_at).toLocaleString("en-GB"),
     }))
+  );
+
+  add(
+    wb,
+    "Valuation",
+    [
+      { Product: "TOTAL", "Stock (pcs)": "", "At cost (GHS)": ghs(data.valuation.totalCost), "At retail (GHS)": ghs(data.valuation.totalRetail) },
+      ...data.valuation.rows.map((r) => ({
+        Product: r.name,
+        "Stock (pcs)": r.stock_pieces,
+        "At cost (GHS)": ghs(r.cost_value),
+        "At retail (GHS)": ghs(r.retail_value),
+      })),
+    ]
+  );
+  add(
+    wb,
+    "Slow movers",
+    data.slowMovers.map((r) => ({
+      Product: r.name,
+      "Stock (pcs)": r.stock_pieces,
+      "Sold in period (pcs)": r.pieces_sold,
+      "Last sold": r.last_sold ? new Date(r.last_sold).toLocaleDateString("en-GB") : "never",
+    }))
+  );
+  add(
+    wb,
+    "Stock alerts",
+    [
+      ...data.stockAlerts.out.map((r) => ({ Status: "Out of stock", Product: r.name, "Stock (pcs)": r.stock_pieces, "Reorder level": r.low_stock_threshold })),
+      ...data.stockAlerts.low.map((r) => ({ Status: "Low stock", Product: r.name, "Stock (pcs)": r.stock_pieces, "Reorder level": r.low_stock_threshold })),
+    ]
   );
 
   XLSX.writeFile(wb, `countertop-report-${data.rangeLabel.replace(/\s+/g, "-")}.xlsx`);

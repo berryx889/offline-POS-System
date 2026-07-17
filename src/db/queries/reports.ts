@@ -10,7 +10,8 @@ export interface Range {
 
 export interface SalesSummary {
   count: number;
-  revenue: number;
+  revenue: number; // includes tax (it's the customer-facing total)
+  taxTotal: number; // the portion of revenue that was tax
   profit: number;
   cashTotal: number;
   momoTotal: number;
@@ -18,9 +19,16 @@ export interface SalesSummary {
 }
 
 export async function salesSummary(r: Range): Promise<SalesSummary> {
-  const [head] = await native.select<{ count: number; revenue: number; cashTotal: number; momoTotal: number }>(
+  const [head] = await native.select<{
+    count: number;
+    revenue: number;
+    taxTotal: number;
+    cashTotal: number;
+    momoTotal: number;
+  }>(
     `SELECT COUNT(*) AS count,
             COALESCE(SUM(total_pesewas), 0) AS revenue,
+            COALESCE(SUM(tax_pesewas), 0) AS taxTotal,
             COALESCE(SUM(CASE payment_method
               WHEN 'cash' THEN amount_paid_pesewas - change_pesewas
               WHEN 'split' THEN cash_part_pesewas ELSE 0 END), 0) AS cashTotal,
