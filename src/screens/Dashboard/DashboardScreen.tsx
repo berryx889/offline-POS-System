@@ -10,6 +10,7 @@ import {
   topProductsToday,
   lowStockProducts,
   hourlyRevenue,
+  revenueByBranchToday,
 } from "@/db/queries/analytics";
 import { listSales, getSaleDetail, type SaleRow } from "@/db/queries/sales";
 import { getSettings } from "@/db/queries/settings";
@@ -40,6 +41,10 @@ export function DashboardScreen() {
   const { data: hourly = [] } = useQuery({ queryKey: ["hourly"], queryFn: hourlyRevenue });
   const { data: top = [] } = useQuery({ queryKey: ["top-today"], queryFn: () => topProductsToday(10) });
   const { data: lowStock = [] } = useQuery({ queryKey: ["low-stock"], queryFn: lowStockProducts });
+  const { data: byBranch = [] } = useQuery({
+    queryKey: ["revenue-by-branch"],
+    queryFn: revenueByBranchToday,
+  });
   const { data: feed = [] } = useQuery({
     queryKey: ["today-feed"],
     queryFn: () => listSales({ from: todayStartISO(), limit: 50 }),
@@ -53,6 +58,7 @@ export function DashboardScreen() {
     queryClient.invalidateQueries({ queryKey: ["top-today"] });
     queryClient.invalidateQueries({ queryKey: ["hourly"] });
     queryClient.invalidateQueries({ queryKey: ["low-stock"] });
+    queryClient.invalidateQueries({ queryKey: ["revenue-by-branch"] });
   });
   useAppEvent("stock:changed", () => {
     queryClient.invalidateQueries({ queryKey: ["low-stock"] });
@@ -76,6 +82,27 @@ export function DashboardScreen() {
         <Stat label="Sales" value={String(summary?.salesCount ?? 0)} />
         <Stat label="Items sold" value={String(summary?.itemsSold ?? 0)} />
       </div>
+
+      {/* Only worth showing once a shop actually has more than one branch. */}
+      {byBranch.length > 1 && (
+        <Card title="Today's revenue by branch" className="mb-6">
+          <ul className="divide-y divide-ink/5">
+            {byBranch.map((b) => (
+              <li key={b.branch_id ?? "unassigned"} className="flex items-center justify-between py-2">
+                <span className="font-sans font-medium text-ink">{b.branch_name}</span>
+                <MoneyText pesewas={b.revenue} />
+              </li>
+            ))}
+            <li className="flex items-center justify-between border-t-2 border-ink/10 py-2 pt-3">
+              <span className="font-sans font-semibold text-ink">Total</span>
+              <MoneyText
+                pesewas={byBranch.reduce((sum, b) => sum + b.revenue, 0)}
+                className="font-semibold text-ledger"
+              />
+            </li>
+          </ul>
+        </Card>
+      )}
 
       <div className="grid grid-cols-[1fr_360px] gap-6">
         {/* Left column: chart, top products, low stock */}
@@ -182,9 +209,17 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
+    <section className={cn("rounded-2xl border border-ink/8 bg-tape p-5 shadow-card", className)}>
       <h2 className="mb-3 font-sans text-sm font-semibold uppercase tracking-wide text-ink/50">
         {title}
       </h2>

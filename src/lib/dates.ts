@@ -42,6 +42,12 @@ export function startOfMonth(d = new Date()): Date {
   return x;
 }
 
+export function startOfYear(d = new Date()): Date {
+  const x = startOfDay(d);
+  x.setMonth(0, 1);
+  return x;
+}
+
 /** A [from, toExclusive) ISO window from two local date inputs (YYYY-MM-DD),
  *  end inclusive of the whole end day. */
 export function rangeFromDates(fromDate: Date, toDate: Date): { from: string; toExclusive: string } {

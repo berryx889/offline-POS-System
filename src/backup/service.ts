@@ -46,7 +46,15 @@ export async function backupNow(): Promise<string | null> {
   return name;
 }
 
-/** Restore from raw .ctbk bytes. The caller reloads the app afterwards. */
+/** Restore from raw .ctbk bytes. The caller reloads the app afterwards.
+ *
+ *  NOT written to audit_log: importDatabase() overwrites the pos.db file out
+ *  from under the live connection, which is only safe again after the
+ *  mandatory reload reopens it — a write attempted in between would target a
+ *  connection in an undefined state. A real gap (no in-DB trail of "this file
+ *  was restored"), not an oversight; fixing it needs the restore trail to
+ *  live outside the file being replaced (e.g. an OS-level log), which is out
+ *  of scope here. */
 export async function restoreFromBytes(bytes: Uint8Array): Promise<void> {
   // A SQLite file starts with "SQLite format 3\0".
   const header = new TextDecoder().decode(bytes.slice(0, 15));

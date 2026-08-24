@@ -7,7 +7,7 @@ import { seedIfEmpty } from "./seed";
 import { setupFts } from "./fts";
 import { autoSnapshotIfDue } from "@/backup/service";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 // Guard against concurrent callers (e.g. React StrictMode invoking the boot
 // effect twice) racing the seed and inserting duplicate rows. Everyone shares
@@ -68,6 +68,27 @@ async function runMigrate(): Promise<void> {
   }
   if (await missingColumn("stock_movements", "prev_pieces")) await rebuildMovementsForV3();
   if (await saleItemsHasUnitCheck()) await rebuildSaleItemsForV3();
+
+  // v4: branches, granular roles/permissions, stock transfers, sync queue.
+  // branches/stock_transfers/sync_queue tables themselves come from schema.sql
+  // above; what's left is widening users.role (a CHECK, so it needs the same
+  // rebuild-in-place approach as v2/v3) and adding branch_id to the tables a
+  // branch scopes.
+  if (await usersRoleNeedsV4()) await rebuildUsersForV4();
+  if (await missingColumn("products", "branch_id")) {
+    await native.execute("ALTER TABLE products ADD COLUMN branch_id INTEGER REFERENCES branches(id)");
+  }
+  if (await missingColumn("sales", "branch_id")) {
+    await native.execute("ALTER TABLE sales ADD COLUMN branch_id INTEGER REFERENCES branches(id)");
+  }
+  await native.execute("CREATE INDEX IF NOT EXISTS idx_products_branch ON products(branch_id)");
+  await native.execute("CREATE INDEX IF NOT EXISTS idx_sales_branch ON sales(branch_id)");
+  await native.execute("CREATE INDEX IF NOT EXISTS idx_users_branch ON users(branch_id)");
+  await ensureMainBranchAndBackfill();
+  await native.execute(
+    "INSERT OR IGNORE INTO settings (key, value) VALUES ('vendor_name', 'September Incorporation'), ('support_phone', '024-18-96-012')"
+  );
+  await ensureLicenseDefault(current);
 
   if (current < SCHEMA_VERSION) {
     await native.execute(
@@ -268,4 +289,78 @@ async function rebuildSalesForV2(): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_sales_seq ON sales(seq)",
     ],
   });
+}
+
+/** True while `users.role` still has the v1 CHECK restricting it to admin/cashier. */
+async function usersRoleNeedsV4(): Promise<boolean> {
+  const [row] = await native.select<{ sql: string }>(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+  );
+  return row != null && row.sql.includes("'admin', 'cashier'");
+}
+
+/** Widen `users.role` to the full v4 role set and add `permissions` (a JSON
+ *  override blob -- null means "use the role's default permission set", see
+ *  src/auth/permissions.ts) + `branch_id`. Existing 'admin'/'cashier' rows are
+ *  untouched by the copy; the CHECK just stops rejecting the new role names. */
+async function rebuildUsersForV4(): Promise<void> {
+  await rebuildTable({
+    table: "users",
+    createColumns: `
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN
+        ('super_admin', 'owner', 'admin', 'manager', 'supervisor', 'cashier')),
+      pin_hash TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      permissions TEXT,
+      branch_id INTEGER REFERENCES branches(id),
+      created_at TEXT NOT NULL`,
+    insertColumns: "id, name, role, pin_hash, active, created_at",
+    insertSelect: "id, name, role, pin_hash, active, created_at",
+    afterRename: [],
+  });
+}
+
+/** Every branch-scoped row (products/sales/users) needs a branch_id. Existing
+ *  single-branch shops get one "Main" branch created automatically and every
+ *  pre-v4 row backfilled onto it, so nothing becomes orphaned by the upgrade. */
+async function ensureMainBranchAndBackfill(): Promise<void> {
+  const [{ n }] = await native.select<{ n: number }>("SELECT COUNT(*) AS n FROM branches");
+  if (n === 0) {
+    await native.execute(
+      "INSERT INTO branches (name, code, active, created_at) VALUES ('Main', 'MAIN', 1, ?)",
+      [new Date().toISOString()]
+    );
+  }
+  const [{ id: mainId }] = await native.select<{ id: number }>(
+    "SELECT id FROM branches ORDER BY id LIMIT 1"
+  );
+  await native.execute("UPDATE products SET branch_id = ? WHERE branch_id IS NULL", [mainId]);
+  await native.execute("UPDATE sales SET branch_id = ? WHERE branch_id IS NULL", [mainId]);
+  await native.execute("UPDATE users SET branch_id = ? WHERE branch_id IS NULL", [mainId]);
+}
+
+/** Decide whether this install needs to go through LicenseGate.
+ *  - Already has a license_status row (activated, or already decided): leave it.
+ *  - Mock/browser dev harness: always pre-activate, same spirit as skipping
+ *    window.print() in mock mode (SellScreen) -- there's no install flow to
+ *    test license activation against in dev, and it shouldn't block testing.
+ *  - `current` (the schema version this DB had *before* this migrate() run)
+ *    is 0 only for a genuinely fresh database -- one that just got its schema
+ *    for the first time. Anything upgrading from a pre-v4 install (current
+ *    1-3) already has real data and a paying user behind it; grandfather it
+ *    in as active rather than retroactively locking out existing customers.
+ *    A truly fresh install (current === 0, real Tauri build) is left unset,
+ *    so LicenseGate demands activation. */
+async function ensureLicenseDefault(current: number): Promise<void> {
+  const rows = await native.select<{ value: string }>(
+    "SELECT value FROM settings WHERE key = 'license_status'"
+  );
+  if (rows.length) return;
+  if (native.kind === "mock" || current > 0) {
+    await native.execute(
+      "INSERT INTO settings (key, value) VALUES ('license_status', 'active')"
+    );
+  }
 }

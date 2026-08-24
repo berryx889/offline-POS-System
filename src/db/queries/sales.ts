@@ -8,6 +8,9 @@
 import { native } from "@/native";
 import { unitPrice, lineTotal, linePieces, type CartLine } from "@/store/cartStore";
 import { applyStockMovement } from "./movements";
+import { getCurrentBranchId } from "./branches";
+import { enqueueChange } from "@/sync/queue";
+import { syncNow } from "@/sync/service";
 
 export type PaymentMethod = "cash" | "momo" | "split" | "credit";
 
@@ -232,6 +235,7 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
     throw new Error("A credit sale needs a customer");
   }
   const now = new Date().toISOString();
+  const branchId = await getCurrentBranchId();
 
   // Pieces needed per product (a customer may have box + loose lines of one item).
   const need = new Map<number, number>();
@@ -267,8 +271,8 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
         (receipt_no, user_id, subtotal_pesewas, discount_pesewas, total_pesewas,
          amount_paid_pesewas, change_pesewas, payment_method, cash_part_pesewas,
          momo_part_pesewas, momo_reference, status, seq, created_at,
-         customer_id, credit_pesewas, tax_pesewas, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?)`,
+         customer_id, credit_pesewas, tax_pesewas, note, branch_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?)`,
       [
         receiptNo,
         userId,
@@ -287,6 +291,7 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
         credit,
         tax,
         input.note?.trim() || null,
+        branchId,
       ]
     );
     const saleId = res.lastInsertId!;
@@ -320,6 +325,18 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
     }
 
     await native.execute("COMMIT");
+
+    // Queue this sale for a future cloud sync (see src/sync/ -- no backend
+    // exists yet, so this only records the change locally and syncNow() is a
+    // no-op until sync_endpoint_url is configured). Never blocks or fails the
+    // sale: a queue-write problem here shouldn't undo an already-committed sale.
+    try {
+      await enqueueChange("sale", saleId, "insert", { receiptNo, totalPesewas: total });
+      void syncNow();
+    } catch {
+      /* best-effort */
+    }
+
     return { saleId, receiptNo, totalPesewas: total, changePesewas: change };
   } catch (e) {
     await native.execute("ROLLBACK");

@@ -13,6 +13,28 @@ export interface TodaySummary {
   grossProfit: number;
 }
 
+export interface BranchRevenue {
+  branch_id: number | null;
+  branch_name: string;
+  revenue: number;
+}
+
+/** Today's revenue split by branch (v4 multi-branch) -- only meaningful once a
+ *  shop has more than one; the Dashboard hides this section otherwise. */
+export async function revenueByBranchToday(): Promise<BranchRevenue[]> {
+  const from = todayStartISO();
+  return native.select<BranchRevenue>(
+    `SELECT b.id AS branch_id, COALESCE(b.name, 'Unassigned') AS branch_name,
+            COALESCE(SUM(s.total_pesewas), 0) AS revenue
+       FROM branches b
+       LEFT JOIN sales s ON s.branch_id = b.id AND s.status = 'completed' AND s.created_at >= ?
+      WHERE b.active = 1
+      GROUP BY b.id
+      ORDER BY b.name`,
+    [from]
+  );
+}
+
 export async function todaySummary(): Promise<TodaySummary> {
   const from = todayStartISO();
   const [head] = await native.select<{ revenue: number; salesCount: number }>(

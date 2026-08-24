@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { listActiveUsers, authenticate, type User } from "@/db/queries/users";
 import { getSettings } from "@/db/queries/settings";
 import { useSession } from "@/store/sessionStore";
+import { isAdminTier, pinLengthFor } from "@/auth/permissions";
+import { logAudit } from "@/db/queries/audit";
 import { Icon } from "@/components/Icon";
 import { PinPad } from "./PinPad";
 import { RecoverBox } from "./RecoverBox";
@@ -22,7 +24,7 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [recovering, setRecovering] = useState(false);
 
-  const maxLength = selected?.role === "admin" ? 6 : 4;
+  const maxLength = selected ? pinLengthFor(selected.role) : 6;
 
   async function submit() {
     if (!selected || pin.length < maxLength || busy) return;
@@ -31,6 +33,7 @@ export function LoginScreen() {
     setBusy(false);
     if (user) {
       login(user);
+      logAudit(user.id, "login", {});
     } else {
       setShake(true);
       setPin("");
@@ -77,7 +80,7 @@ export function LoginScreen() {
                   <span
                     className={cn(
                       "flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold",
-                      u.role === "admin" ? "bg-ledger text-tape" : "bg-carbon/15 text-carbon"
+                      isAdminTier(u.role) ? "bg-ledger text-tape" : "bg-carbon/15 text-carbon"
                     )}
                   >
                     {u.name[0]?.toUpperCase()}

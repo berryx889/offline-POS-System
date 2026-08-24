@@ -20,7 +20,7 @@ export function CartLineRow({ line }: { line: CartLine }) {
   const remove = useCart((s) => s.remove);
   const lastTouchedId = useCart((s) => s.lastTouchedId);
   const touchTick = useCart((s) => s.touchTick);
-  const isAdmin = useSession((s) => s.user?.role === "admin");
+  const isAdmin = useSession((s) => s.can("change_price"));
   const sessionUserId = useSession((s) => s.user?.id) ?? null;
   const canBox = line.wholesalePesewas != null;
   const overridden = line.overridePesewas != null;

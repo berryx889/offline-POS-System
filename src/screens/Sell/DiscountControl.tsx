@@ -17,7 +17,7 @@ const DEFAULT_THRESHOLD = 5000; // GHS 50.00
 export function DiscountControl({ subtotalPesewas }: { subtotalPesewas: number }) {
   const discount = useCart((s) => s.discountPesewas);
   const setDiscount = useCart((s) => s.setDiscount);
-  const isAdmin = useSession((s) => s.user?.role === "admin");
+  const isAdmin = useSession((s) => s.can("change_price"));
   const sessionUserId = useSession((s) => s.user?.id) ?? null;
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const threshold = settings?.discount_threshold ? parseInt(settings.discount_threshold, 10) : DEFAULT_THRESHOLD;

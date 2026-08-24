@@ -24,6 +24,7 @@ import {
 } from "@/db/queries/products";
 import { listUnits, saveUnits } from "@/db/queries/units";
 import { useSession } from "@/store/sessionStore";
+import { can } from "@/auth/permissions";
 import { toPesewas, formatPesewas } from "@/money";
 import { formatStock } from "@/stock";
 import { emit } from "@/lib/events";
@@ -69,6 +70,11 @@ export function ProductDrawer({
 }) {
   const isEdit = product != null;
   const userId = useSession((s) => s.user?.id) ?? 0;
+  const canChangePrice = useSession((s) => can(s.user, "change_price"));
+  const canDeleteProduct = useSession((s) => can(s.user, "delete_product"));
+  // New products aren't "changing" an existing price, so only lock price
+  // fields down when editing one that already has a price on record.
+  const priceFieldsLocked = isEdit && !canChangePrice;
   const queryClient = useQueryClient();
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
   const { data: families = [] } = useQuery({ queryKey: ["families"], queryFn: listFamilies });
@@ -330,30 +336,36 @@ export function ProductDrawer({
 
           <SectionRule label="Pricing" />
 
+          {priceFieldsLocked && (
+            <p className="-mt-1 text-xs text-ink/40">
+              You don't have permission to change prices on an existing product.
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <L label="Retail price / PC (GHS)">
-              <In value={retail} onChange={setRetail} placeholder="0.00" />
+              <In value={retail} onChange={setRetail} placeholder="0.00" disabled={priceFieldsLocked} />
             </L>
             <L label="Wholesale / BOX (GHS)">
-              <In value={wholesale} onChange={setWholesale} placeholder="optional" />
+              <In value={wholesale} onChange={setWholesale} placeholder="optional" disabled={priceFieldsLocked} />
             </L>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <L label="Wholesale / PC (GHS)">
-              <In value={bulk} onChange={setBulk} placeholder="optional" />
+              <In value={bulk} onChange={setBulk} placeholder="optional" disabled={priceFieldsLocked} />
             </L>
             <L label="…from qty (pcs)">
-              <In value={bulkMinQty} onChange={setBulkMinQty} type="number" />
+              <In value={bulkMinQty} onChange={setBulkMinQty} type="number" disabled={priceFieldsLocked} />
             </L>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <L label="Promo price / PC (GHS)">
-              <In value={promo} onChange={setPromo} placeholder="optional" />
+              <In value={promo} onChange={setPromo} placeholder="optional" disabled={priceFieldsLocked} />
             </L>
             <L label="Cost price / PC (GHS)">
-              <In value={cost} onChange={setCost} placeholder="optional" />
+              <In value={cost} onChange={setCost} placeholder="optional" disabled={priceFieldsLocked} />
             </L>
           </div>
 
@@ -405,7 +417,7 @@ export function ProductDrawer({
               <button onClick={toggleActive} className="font-medium text-carbon hover:underline">
                 {product!.active === 1 ? "Deactivate" : "Reactivate"}
               </button>
-              {salesCount === 0 && (
+              {salesCount === 0 && canDeleteProduct && (
                 <button onClick={remove} className="font-medium text-stamp hover:underline">
                   Delete
                 </button>
@@ -620,6 +632,7 @@ function In({
   placeholder,
   autoFocus,
   list,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -627,6 +640,7 @@ function In({
   placeholder?: string;
   autoFocus?: boolean;
   list?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -635,10 +649,11 @@ function In({
       autoFocus={autoFocus}
       placeholder={placeholder}
       list={list}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
         "w-full rounded-lg border border-ink/15 bg-tape px-3 py-2 text-sm",
-        "focus:outline-none focus:ring-2 focus:ring-carbon"
+        "focus:outline-none focus:ring-2 focus:ring-carbon disabled:cursor-not-allowed disabled:opacity-50"
       )}
     />
   );

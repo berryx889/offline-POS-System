@@ -4,6 +4,7 @@
 import { native } from "@/native";
 import { logAudit } from "./audit";
 import { applyStockMovement, type MovementReason } from "./movements";
+import { getCurrentBranchId } from "./branches";
 import { isFtsReady, toFtsQuery } from "../fts";
 
 export interface Product {
@@ -30,6 +31,7 @@ export interface Product {
   expiry_date: string | null;
   batch_number: string | null;
   active: number;
+  branch_id: number | null;
 }
 
 // Exported so every Product-returning query (including analytics.ts) selects
@@ -40,7 +42,8 @@ export const SELECT_PRODUCT = `
          p.image, p.category_id, c.name AS category_name, p.pieces_per_box,
          p.retail_price_pesewas, p.wholesale_price_pesewas, p.promo_price_pesewas,
          p.bulk_price_pesewas, p.bulk_min_qty, p.cost_price_pesewas,
-         p.stock_pieces, p.low_stock_threshold, p.expiry_date, p.batch_number, p.active
+         p.stock_pieces, p.low_stock_threshold, p.expiry_date, p.batch_number, p.active,
+         p.branch_id
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id`;
 
@@ -250,6 +253,7 @@ export async function createProduct(
   userId: number
 ): Promise<number> {
   const now = new Date().toISOString();
+  const branchId = await getCurrentBranchId();
   await native.execute("BEGIN IMMEDIATE");
   try {
     const res = await native.execute(
@@ -257,8 +261,8 @@ export async function createProduct(
         (name, barcode, sku, family, brand, supplier, description, image, category_id,
          pieces_per_box, retail_price_pesewas, wholesale_price_pesewas, promo_price_pesewas,
          bulk_price_pesewas, bulk_min_qty, cost_price_pesewas, stock_pieces,
-         low_stock_threshold, expiry_date, batch_number, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+         low_stock_threshold, expiry_date, batch_number, active, branch_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       [
         input.name,
         input.barcode,
@@ -280,6 +284,7 @@ export async function createProduct(
         input.low_stock_threshold,
         input.expiry_date,
         input.batch_number,
+        branchId,
         now,
         now,
       ]
@@ -297,6 +302,7 @@ export async function createProduct(
       );
     }
     await native.execute("COMMIT");
+    await logAudit(userId, "product_create", { product_id: id, name: input.name });
     return id;
   } catch (e) {
     await native.execute("ROLLBACK");
@@ -443,6 +449,7 @@ export async function recordStockChange(
   try {
     await applyStockMovement({ productId: id, changePieces, reason, userId, note });
     await native.execute("COMMIT");
+    await logAudit(userId, "stock_adjustment", { product_id: id, change_pieces: changePieces, reason, note });
   } catch (e) {
     await native.execute("ROLLBACK");
     throw e;

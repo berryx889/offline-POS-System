@@ -1,5 +1,6 @@
-// Users & PINs management (pos-prd.md §6.7). Add a cashier, reset a PIN, deactivate.
-// Admin PINs are 6 digits, cashier 4. Every change is audited via the queries.
+// Users & PINs management (pos-prd.md §6.7). Add an employee, reset a PIN,
+// deactivate, and (v4) fine-tune their permissions beyond their role's default.
+// Every change is audited via the queries.
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,9 +9,18 @@ import {
   createUser,
   resetPin,
   setUserActive,
-  pinLengthFor,
+  setUserPermissions,
   type Role,
+  type User,
 } from "@/db/queries/users";
+import {
+  ALL_PERMISSIONS,
+  PERMISSION_LABELS,
+  ROLE_LABELS,
+  ALL_ROLES,
+  pinLengthFor,
+  can,
+} from "@/auth/permissions";
 import { useSession } from "@/store/sessionStore";
 import { cn } from "@/lib/cn";
 
@@ -25,6 +35,7 @@ export function UsersSection() {
   const [error, setError] = useState<string | null>(null);
   const [resetting, setResetting] = useState<number | null>(null);
   const [resetPinValue, setResetPinValue] = useState("");
+  const [editingPerms, setEditingPerms] = useState<number | null>(null);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["all-users"] });
@@ -35,7 +46,7 @@ export function UsersSection() {
     setError(null);
     if (!name.trim()) return setError("Name is required.");
     const need = pinLengthFor(role);
-    if (pin.length !== need || !/^\d+$/.test(pin)) return setError(`${role} PIN must be ${need} digits.`);
+    if (pin.length !== need || !/^\d+$/.test(pin)) return setError(`${ROLE_LABELS[role]} PIN must be ${need} digits.`);
     await createUser(name, role, pin, actorId);
     setName("");
     setPin("");
@@ -53,6 +64,20 @@ export function UsersSection() {
     setError(null);
   }
 
+  async function togglePermission(u: User, key: (typeof ALL_PERMISSIONS)[number]) {
+    const current = can(u, key);
+    await setUserPermissions(u.id, { [key]: !current }, actorId);
+    refresh();
+  }
+
+  async function clearOverride(u: User, key: (typeof ALL_PERMISSIONS)[number]) {
+    // Removing the key entirely (not just setting it false) restores the role default.
+    const overrides: Record<string, boolean> = u.permissions ? JSON.parse(u.permissions) : {};
+    delete overrides[key];
+    await setUserPermissions(u.id, overrides, actorId);
+    refresh();
+  }
+
   return (
     <section className="mb-6 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
       <h2 className="mb-4 font-sans text-sm font-semibold uppercase tracking-wide text-ink/50">
@@ -60,57 +85,102 @@ export function UsersSection() {
       </h2>
 
       <ul className="mb-5 divide-y divide-ink/5">
-        {users.map((u) => (
-          <li key={u.id} className="py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="font-sans font-medium text-ink">{u.name}</span>
-                <span className="ml-2 text-xs uppercase tracking-wide text-ink/40">{u.role}</span>
-                {u.active !== 1 && <span className="ml-2 text-xs text-stamp">inactive</span>}
+        {users.map((u) => {
+          const overrides: Record<string, boolean> = u.permissions ? JSON.parse(u.permissions) : {};
+          return (
+            <li key={u.id} className="py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-sans font-medium text-ink">{u.name}</span>
+                  <span className="ml-2 text-xs uppercase tracking-wide text-ink/40">
+                    {ROLE_LABELS[u.role]}
+                  </span>
+                  {u.active !== 1 && <span className="ml-2 text-xs text-stamp">inactive</span>}
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <button
+                    onClick={() => setEditingPerms(editingPerms === u.id ? null : u.id)}
+                    className="font-medium text-carbon hover:underline"
+                  >
+                    Permissions
+                  </button>
+                  <button
+                    onClick={() => {
+                      setResetting(resetting === u.id ? null : u.id);
+                      setResetPinValue("");
+                      setError(null);
+                    }}
+                    className="font-medium text-carbon hover:underline"
+                  >
+                    Reset PIN
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await setUserActive(u.id, u.active !== 1, actorId);
+                      refresh();
+                    }}
+                    className="font-medium text-ink/60 hover:underline"
+                    disabled={u.id === actorId}
+                  >
+                    {u.active === 1 ? "Deactivate" : "Reactivate"}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-sm">
-                <button
-                  onClick={() => {
-                    setResetting(resetting === u.id ? null : u.id);
-                    setResetPinValue("");
-                    setError(null);
-                  }}
-                  className="font-medium text-carbon hover:underline"
-                >
-                  Reset PIN
-                </button>
-                <button
-                  onClick={async () => {
-                    await setUserActive(u.id, u.active !== 1, actorId);
-                    refresh();
-                  }}
-                  className="font-medium text-ink/60 hover:underline"
-                  disabled={u.id === actorId}
-                >
-                  {u.active === 1 ? "Deactivate" : "Reactivate"}
-                </button>
-              </div>
-            </div>
-            {resetting === u.id && (
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  value={resetPinValue}
-                  onChange={(e) => setResetPinValue(e.target.value)}
-                  placeholder={`${pinLengthFor(u.role)}-digit PIN`}
-                  className="w-40 rounded-lg border border-ink/15 bg-tape px-3 py-2 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-carbon"
-                />
-                <button
-                  onClick={() => doReset(u.id, u.role)}
-                  className="rounded-lg bg-ledger px-4 py-2 text-sm font-semibold text-tape hover:bg-ledger-deep"
-                >
-                  Save PIN
-                </button>
-              </div>
-            )}
-          </li>
-        ))}
+              {resetting === u.id && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    value={resetPinValue}
+                    onChange={(e) => setResetPinValue(e.target.value)}
+                    placeholder={`${pinLengthFor(u.role)}-digit PIN`}
+                    className="w-40 rounded-lg border border-ink/15 bg-tape px-3 py-2 text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-carbon"
+                  />
+                  <button
+                    onClick={() => doReset(u.id, u.role)}
+                    className="rounded-lg bg-ledger px-4 py-2 text-sm font-semibold text-tape hover:bg-ledger-deep"
+                  >
+                    Save PIN
+                  </button>
+                </div>
+              )}
+              {editingPerms === u.id && (
+                <div className="mt-3 rounded-lg border border-ink/8 bg-paper p-3">
+                  <p className="mb-2 text-xs text-ink/50">
+                    Unchecked items follow the {ROLE_LABELS[u.role]} default. Toggling one here
+                    overrides it for this person only.
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+                    {ALL_PERMISSIONS.map((key) => {
+                      const overridden = key in overrides;
+                      return (
+                        <label
+                          key={key}
+                          className="flex items-center gap-2 text-sm text-ink/80"
+                          title={overridden ? "Overridden — click label to reset to role default" : undefined}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={can(u, key)}
+                            onChange={() => togglePermission(u, key)}
+                            className="h-4 w-4 accent-ledger"
+                          />
+                          <span
+                            className={cn(overridden && "font-semibold text-ledger-deep underline decoration-dotted")}
+                            onClick={overridden ? () => clearOverride(u, key) : undefined}
+                            style={overridden ? { cursor: "pointer" } : undefined}
+                          >
+                            {PERMISSION_LABELS[key]}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       <div className="rounded-xl border border-ink/8 bg-paper p-4">
@@ -127,8 +197,11 @@ export function UsersSection() {
             onChange={(e) => setRole(e.target.value as Role)}
             className="h-10 rounded-lg border border-ink/15 bg-tape px-3 text-sm focus:outline-none focus:ring-2 focus:ring-carbon"
           >
-            <option value="cashier">Cashier</option>
-            <option value="admin">Admin</option>
+            {ALL_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
           </select>
           <input
             type="password"

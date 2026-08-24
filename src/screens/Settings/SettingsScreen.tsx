@@ -11,6 +11,9 @@ import { UsersSection } from "./UsersSection";
 import { RecoverySection } from "./RecoverySection";
 import { BackupSection } from "./BackupSection";
 import { AuditSection } from "./AuditSection";
+import { AboutSection } from "./AboutSection";
+import { BranchesSection } from "./BranchesSection";
+import { SyncSection } from "./SyncSection";
 
 export function SettingsScreen() {
   const queryClient = useQueryClient();
@@ -43,6 +46,8 @@ export function SettingsScreen() {
   return (
     <div className="mx-auto max-w-2xl p-6">
       <h1 className="mb-6 font-sans text-xl font-semibold text-ink">Settings</h1>
+
+      <AboutSection />
 
       <Section title="Business (printed on receipts)">
         <Field label="Business name">
@@ -131,9 +136,11 @@ export function SettingsScreen() {
         {status && <span className="text-sm text-ledger">{status}</span>}
       </div>
 
+      <BranchesSection />
       <UsersSection />
       <RecoverySection />
       <BackupSection />
+      <SyncSection />
       <AuditSection />
     </div>
   );

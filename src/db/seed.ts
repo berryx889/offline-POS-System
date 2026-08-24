@@ -86,6 +86,11 @@ export async function seedIfEmpty(): Promise<void> {
     ["sound_enabled", "1"],
     ["tax_rate_percent", "0"],
     ["idle_lock_minutes", "0"],
+    // v4: commercial-software branding on the About panel (Settings) and the
+    // startup splash. license_key deliberately isn't seeded here -- it's unset
+    // until the license-activation flow (src/auth/license.ts) sets it.
+    ["vendor_name", "September Incorporation"],
+    ["support_phone", "024-18-96-012"],
   ];
   for (const [key, value] of settings) {
     await native.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);

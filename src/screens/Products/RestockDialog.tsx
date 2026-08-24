@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { recordStockChange, type Product } from "@/db/queries/products";
 import { listMovements, type MovementReason } from "@/db/queries/movements";
 import { useSession } from "@/store/sessionStore";
+import { can } from "@/auth/permissions";
 import { formatStock, piecesForUnit } from "@/stock";
 import { emit } from "@/lib/events";
 import { cn } from "@/lib/cn";
@@ -26,6 +27,7 @@ const REASONS: { value: ManualReason; label: string; direction: "in" | "out" | "
 
 export function RestockDialog({ product, onClose }: { product: Product; onClose: () => void }) {
   const userId = useSession((s) => s.user?.id) ?? 0;
+  const canAdjustStock = useSession((s) => can(s.user, "stock_adjustment"));
   const queryClient = useQueryClient();
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState<"piece" | "box">(product.pieces_per_box > 1 ? "box" : "piece");
@@ -148,12 +150,17 @@ export function RestockDialog({ product, onClose }: { product: Product; onClose:
           </span>
         </div>
 
+        {!canAdjustStock && (
+          <p className="mt-3 text-sm font-medium text-stamp">
+            You don't have permission to change stock. Ask an admin or manager.
+          </p>
+        )}
         {error && <p className="mt-3 text-sm font-medium text-stamp">{error}</p>}
 
         <div className="mt-4 flex gap-2">
           <button
             onClick={confirm}
-            disabled={busy}
+            disabled={busy || !canAdjustStock}
             className="h-11 flex-1 rounded-xl bg-ledger font-semibold text-tape hover:bg-ledger-deep disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-carbon"
           >
             {busy ? "Saving…" : "Confirm"}

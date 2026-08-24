@@ -38,7 +38,7 @@ fn verify_pin(pin: String, hash: String) -> Result<bool, String> {
 /// function signatures do drift between versions.
 #[cfg(target_os = "windows")]
 fn write_raw(printer: &str, bytes: &[u8]) -> Result<(), String> {
-    use windows::core::PCWSTR;
+    use windows::core::{PCWSTR, PWSTR};
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Graphics::Printing::{
         ClosePrinter, EndDocPrinter, EndPagePrinter, OpenPrinterW, StartDocPrinterW,
@@ -54,19 +54,20 @@ fn write_raw(printer: &str, bytes: &[u8]) -> Result<(), String> {
         OpenPrinterW(PCWSTR(name.as_mut_ptr()), &mut h, None).map_err(|e| e.to_string())?;
 
         let info = DOC_INFO_1W {
-            pDocName: PCWSTR(doc.as_mut_ptr()),
-            pOutputFile: PCWSTR::null(),
-            pDatatype: PCWSTR(raw.as_mut_ptr()),
+            pDocName: PWSTR(doc.as_mut_ptr()),
+            pOutputFile: PWSTR::null(),
+            pDatatype: PWSTR(raw.as_mut_ptr()),
         };
         // Level 1. StartDocPrinterW returns a job id (0 = failure).
         if StartDocPrinterW(h, 1, &info) == 0 {
             let _ = ClosePrinter(h);
             return Err("StartDocPrinter failed".into());
         }
-        StartPagePrinter(h).map_err(|e| e.to_string())?;
+        StartPagePrinter(h).ok().map_err(|e| e.to_string())?;
 
         let mut written = 0u32;
         WritePrinter(h, bytes.as_ptr() as _, bytes.len() as u32, &mut written)
+            .ok()
             .map_err(|e| e.to_string())?;
 
         let _ = EndPagePrinter(h);

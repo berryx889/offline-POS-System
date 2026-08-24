@@ -27,7 +27,7 @@ rand = "0.8"
 # (src/lib.rs write_raw). Windows-only — never built on macOS/Linux, so it
 # can't affect the dev workflow this project is built and tested against.
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Win32_Graphics_Printing", "Win32_Foundation"] }
+windows = { version = "0.58", features = ["Win32_Graphics_Printing", "Win32_Graphics_Gdi", "Win32_Foundation"] }
 
 [features]
 # This feature is used for production builds where `devUrl` is not needed.

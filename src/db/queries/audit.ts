@@ -1,5 +1,11 @@
-// Audit trail. Every price change, void, override, and PIN reset lands here
+// Audit trail. Every price change, void, override, PIN reset, login/logout,
+// product create/delete, stock adjustment, and permissions change lands here
 // (pos-prd.md §10 non-negotiable). detail is JSON.
+//
+// Immutable by construction: this module is the only writer of audit_log, and
+// it only ever INSERTs (see logAudit below and the raw INSERT in
+// queries/sales.ts's voidSale). No UPDATE or DELETE against this table exists
+// anywhere in the app — don't add one.
 
 import { native } from "@/native";
 

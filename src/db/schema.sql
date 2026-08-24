@@ -172,6 +172,74 @@ CREATE TABLE IF NOT EXISTS customer_ledger (
   created_at     TEXT NOT NULL
 );
 
+-- Branches (v4, MVP 2.0). A single local DB can hold more than one branch's
+-- data (products/users/sales carry branch_id) -- this models multi-branch
+-- ownership today without needing real multi-machine sync, which a future
+-- cloud backend would add on top, not replace.
+CREATE TABLE IF NOT EXISTS branches (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT NOT NULL,
+  code        TEXT UNIQUE NOT NULL,
+  location    TEXT,
+  active      INTEGER NOT NULL DEFAULT 1,
+  created_at  TEXT NOT NULL
+);
+
+-- Stock transfers between branches (v4). Never a manual stock edit -- its own
+-- workflow with a status lifecycle and an approval step.
+CREATE TABLE IF NOT EXISTS stock_transfers (
+  id               INTEGER PRIMARY KEY,
+  transfer_no      TEXT UNIQUE NOT NULL,
+  product_id       INTEGER NOT NULL REFERENCES products(id),
+  from_branch_id   INTEGER NOT NULL REFERENCES branches(id),
+  to_branch_id     INTEGER NOT NULL REFERENCES branches(id),
+  qty_pieces       INTEGER NOT NULL,
+  reason           TEXT,
+  status           TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'approved', 'rejected', 'completed')),
+  requested_by     INTEGER NOT NULL REFERENCES users(id),
+  approved_by      INTEGER REFERENCES users(id),
+  received_by      INTEGER REFERENCES users(id),
+  rejected_reason  TEXT,
+  created_at       TEXT NOT NULL,
+  approved_at      TEXT,
+  completed_at     TEXT
+);
+
+-- Sync queue (v4): a local change log every mutation appends to. This is the
+-- seam a future cloud sync service drains and POSTs -- see src/sync/. No
+-- server exists yet, so rows simply accumulate with synced = 0 until one does.
+CREATE TABLE IF NOT EXISTS sync_queue (
+  id          INTEGER PRIMARY KEY,
+  entity      TEXT NOT NULL,
+  entity_id   INTEGER NOT NULL,
+  op          TEXT NOT NULL CHECK (op IN ('insert', 'update', 'delete')),
+  payload     TEXT NOT NULL,
+  synced      INTEGER NOT NULL DEFAULT 0,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  last_error  TEXT,
+  created_at  TEXT NOT NULL,
+  synced_at   TEXT
+);
+
+-- Operating expenses (v4) -- lets the Financial dashboard show a real net
+-- margin (gross profit minus expenses) instead of only a gross figure.
+CREATE TABLE IF NOT EXISTS expenses (
+  id             INTEGER PRIMARY KEY,
+  category       TEXT NOT NULL,
+  amount_pesewas INTEGER NOT NULL,
+  note           TEXT,
+  branch_id      INTEGER REFERENCES branches(id),
+  user_id        INTEGER NOT NULL REFERENCES users(id),
+  created_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_transfers_from_branch ON stock_transfers(from_branch_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_to_branch ON stock_transfers(to_branch_id);
+CREATE INDEX IF NOT EXISTS idx_transfers_status ON stock_transfers(status);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON sync_queue(synced);
+CREATE INDEX IF NOT EXISTS idx_expenses_created ON expenses(created_at);
+
 -- NOTE: Phase 2 adds an FTS5 virtual table (products_fts) for the manual search
 -- flow (<100ms on 10k rows). It is omitted here so the dev mock adapter runs on
 -- SQLite builds without the FTS5 extension.

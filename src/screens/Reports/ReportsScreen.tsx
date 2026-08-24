@@ -13,6 +13,7 @@ import {
   inventoryValuation,
   slowMovers,
   stockAlerts,
+  smartInventory,
   type Range,
 } from "@/db/queries/reports";
 import {
@@ -27,6 +28,7 @@ import {
 import { exportReportsToExcel } from "@/exporter/reports";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
+import { useSession } from "@/store/sessionStore";
 import { cn } from "@/lib/cn";
 
 type Preset = "today" | "week" | "month" | "custom";
@@ -38,9 +40,11 @@ type Tab =
   | "movements"
   | "valuation"
   | "slow"
-  | "alerts";
+  | "alerts"
+  | "smart";
 
 export function ReportsScreen() {
+  const canExport = useSession((s) => s.can("export_reports"));
   const [preset, setPreset] = useState<Preset>("today");
   const [customFrom, setCustomFrom] = useState(toDateInput(startOfDay()));
   const [customTo, setCustomTo] = useState(toDateInput(new Date()));
@@ -65,6 +69,7 @@ export function ReportsScreen() {
   const valuation = useQuery({ queryKey: ["rep-valuation"], queryFn: inventoryValuation }).data;
   const slow = useQuery({ queryKey: ["rep-slow", ...key], queryFn: () => slowMovers(range) }).data ?? [];
   const alerts = useQuery({ queryKey: ["rep-alerts"], queryFn: stockAlerts }).data;
+  const smart = useQuery({ queryKey: ["rep-smart"], queryFn: smartInventory }).data ?? [];
 
   function exportExcel() {
     if (!summary) return;
@@ -85,12 +90,14 @@ export function ReportsScreen() {
     <div className="flex h-full flex-col p-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-sans text-xl font-semibold text-ink">Reports</h1>
-        <button
-          onClick={exportExcel}
-          className="h-11 rounded-xl border border-ledger px-5 font-semibold text-ledger hover:bg-ledger/5 focus:outline-none focus:ring-2 focus:ring-carbon"
-        >
-          Export to Excel
-        </button>
+        {canExport && (
+          <button
+            onClick={exportExcel}
+            className="h-11 rounded-xl border border-ledger px-5 font-semibold text-ledger hover:bg-ledger/5 focus:outline-none focus:ring-2 focus:ring-carbon"
+          >
+            Export to Excel
+          </button>
+        )}
       </div>
 
       {/* Range picker */}
@@ -138,6 +145,7 @@ export function ReportsScreen() {
             ["valuation", "Valuation"],
             ["slow", "Slow movers"],
             ["alerts", "Stock alerts"],
+            ["smart", "Smart inventory"],
           ] as [Tab, string][]
         ).map(([t, tabLabel]) => (
           <button
@@ -245,6 +253,28 @@ export function ReportsScreen() {
               />
             </div>
           </div>
+        )}
+        {tab === "smart" && (
+          <Table
+            headers={["Product", "Avg/day (30d)", "Days left", "Suggest reorder", "Trend"]}
+            rows={smart.map((r) => [
+              r.name,
+              r.avg_daily_sales,
+              r.days_remaining ?? "—",
+              r.suggested_reorder_pieces > 0 ? formatStock(r.suggested_reorder_pieces, r.pieces_per_box) : "—",
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs font-semibold uppercase",
+                  r.classification === "fast" && "bg-ledger/15 text-ledger-deep",
+                  r.classification === "slow" && "bg-brass/15 text-brass",
+                  r.classification === "dead" && "bg-stamp/15 text-stamp"
+                )}
+              >
+                {r.classification}
+              </span>,
+            ])}
+            empty="No active products."
+          />
         )}
       </div>
     </div>

@@ -4,27 +4,36 @@
 
 import { NavLink } from "react-router-dom";
 import { useSession } from "@/store/sessionStore";
+import { ROLE_LABELS, type Permission } from "@/auth/permissions";
+import { logAudit } from "@/db/queries/audit";
 import { Icon, type IconName } from "./Icon";
 import { cn } from "@/lib/cn";
 
-type Item = { to: string; label: string; icon: IconName; adminOnly?: boolean };
+type Item = { to: string; label: string; icon: IconName; requires?: Permission };
 
 const ITEMS: Item[] = [
   { to: "/sell", label: "Sell", icon: "sell" },
   { to: "/reprints", label: "Reprints", icon: "reprints" },
-  { to: "/products", label: "Products", icon: "products", adminOnly: true },
-  { to: "/customers", label: "Customers", icon: "customers", adminOnly: true },
-  { to: "/dashboard", label: "Dashboard", icon: "dashboard", adminOnly: true },
-  { to: "/end-of-day", label: "End of day", icon: "endday", adminOnly: true },
-  { to: "/reports", label: "Reports", icon: "reports", adminOnly: true },
-  { to: "/settings", label: "Settings", icon: "settings", adminOnly: true },
+  { to: "/products", label: "Products", icon: "products", requires: "view_admin_area" },
+  { to: "/customers", label: "Customers", icon: "customers", requires: "view_admin_area" },
+  { to: "/dashboard", label: "Dashboard", icon: "dashboard", requires: "view_admin_area" },
+  { to: "/end-of-day", label: "End of day", icon: "endday", requires: "view_admin_area" },
+  { to: "/transfers", label: "Transfers", icon: "transfer", requires: "view_admin_area" },
+  { to: "/reports", label: "Reports", icon: "reports", requires: "view_admin_area" },
+  { to: "/financials", label: "Financials", icon: "dashboard", requires: "view_financials" },
+  { to: "/settings", label: "Settings", icon: "settings", requires: "view_admin_area" },
 ];
 
 export function NavRail() {
   const user = useSession((s) => s.user);
   const logout = useSession((s) => s.logout);
-  const isAdmin = user?.role === "admin";
-  const items = ITEMS.filter((i) => !i.adminOnly || isAdmin);
+  const can = useSession((s) => s.can);
+  const items = ITEMS.filter((i) => !i.requires || can(i.requires));
+
+  function doLogout() {
+    if (user) logAudit(user.id, "logout", {});
+    logout();
+  }
 
   return (
     <nav className="flex w-56 shrink-0 flex-col border-r border-ink/5 bg-tape px-4 py-6">
@@ -65,11 +74,11 @@ export function NavRail() {
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-ink">{user?.name}</div>
-            <div className="text-xs capitalize text-ink/40">{user?.role}</div>
+            <div className="text-xs text-ink/40">{user && ROLE_LABELS[user.role]}</div>
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={doLogout}
           className="flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-stamp transition-colors hover:bg-stamp/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-stamp/40"
         >
           <Icon name="logout" size={20} />

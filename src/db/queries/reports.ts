@@ -54,6 +54,35 @@ export async function salesSummary(r: Range): Promise<SalesSummary> {
   };
 }
 
+export interface TrendPoint {
+  bucket: string; // YYYY-MM-DD (day) or YYYY-MM (month)
+  revenue: number;
+  profit: number;
+}
+
+/** Revenue + profit grouped by day or month (SQLite's own substr() bucketing on
+ *  the stored UTC timestamp — fine for a trend line, not for same-day exactness
+ *  at UTC boundaries). One correlated subquery per sale for its profit, same
+ *  shape as todaySummary/analytics.ts, aggregated afterward by bucket. */
+export async function revenueTrend(r: Range, granularity: "day" | "month"): Promise<TrendPoint[]> {
+  const bucketExpr = granularity === "day" ? "substr(created_at, 1, 10)" : "substr(created_at, 1, 7)";
+  return native.select<TrendPoint>(
+    `SELECT bucket, COALESCE(SUM(total_pesewas), 0) AS revenue, COALESCE(SUM(item_profit), 0) AS profit
+       FROM (
+         SELECT s.total_pesewas, ${bucketExpr} AS bucket,
+                (SELECT COALESCE(SUM(si.line_total_pesewas - si.pieces_deducted * COALESCE(p.cost_price_pesewas, 0)), 0)
+                   FROM sale_items si
+                   JOIN products p ON p.id = si.product_id
+                  WHERE si.sale_id = s.id) AS item_profit
+           FROM sales s
+          WHERE s.status = 'completed' AND s.created_at >= ? AND s.created_at < ?
+       )
+      GROUP BY bucket
+      ORDER BY bucket`,
+    [r.from, r.toExclusive]
+  );
+}
+
 export interface ProductRow {
   product_name: string;
   qty: number;
@@ -171,6 +200,72 @@ export async function slowMovers(r: Range, limit = 25): Promise<SlowMoverRow[]> 
       LIMIT ?`,
     [r.from, r.toExclusive, limit]
   );
+}
+
+export interface SmartInventoryRow {
+  id: number;
+  name: string;
+  stock_pieces: number;
+  pieces_per_box: number;
+  avg_daily_sales: number;
+  /** null = hasn't sold in the lookback window, so "days remaining" at the
+   *  current rate isn't a meaningful number (could be 3 days or 3 years). */
+  days_remaining: number | null;
+  suggested_reorder_pieces: number;
+  classification: "fast" | "slow" | "dead";
+}
+
+const SMART_INVENTORY_LOOKBACK_DAYS = 30;
+const SMART_INVENTORY_REORDER_TARGET_DAYS = 14;
+
+/** Average daily sales, days-until-stockout, fast/slow/dead classification, and
+ *  a suggested reorder quantity, over a trailing 30-day window. Classification
+ *  is relative to this shop's own product mix (median velocity among products
+ *  that sold at all), not a fixed universal cutoff — a shop selling mostly
+ *  cement has a different idea of "fast" than one selling sachet water. */
+export async function smartInventory(): Promise<SmartInventoryRow[]> {
+  const since = new Date(Date.now() - SMART_INVENTORY_LOOKBACK_DAYS * 86_400_000).toISOString();
+  const rows = await native.select<{
+    id: number;
+    name: string;
+    stock_pieces: number;
+    pieces_per_box: number;
+    pieces_sold: number;
+  }>(
+    `SELECT p.id, p.name, p.stock_pieces, p.pieces_per_box,
+            COALESCE((
+              SELECT SUM(si.pieces_deducted) FROM sale_items si
+                JOIN sales s ON s.id = si.sale_id
+               WHERE si.product_id = p.id AND s.status = 'completed' AND s.created_at >= ?
+            ), 0) AS pieces_sold
+       FROM products p
+      WHERE p.active = 1
+      ORDER BY p.name`,
+    [since]
+  );
+
+  const withVelocity = rows.map((r) => ({ ...r, avgDaily: r.pieces_sold / SMART_INVENTORY_LOOKBACK_DAYS }));
+  const soldVelocities = withVelocity
+    .filter((r) => r.pieces_sold > 0)
+    .map((r) => r.avgDaily)
+    .sort((a, b) => a - b);
+  const median = soldVelocities.length ? soldVelocities[Math.floor(soldVelocities.length / 2)] : 0;
+
+  return withVelocity.map((r) => {
+    const classification: SmartInventoryRow["classification"] =
+      r.pieces_sold === 0 ? "dead" : r.avgDaily >= median ? "fast" : "slow";
+    const targetStock = Math.ceil(r.avgDaily * SMART_INVENTORY_REORDER_TARGET_DAYS);
+    return {
+      id: r.id,
+      name: r.name,
+      stock_pieces: r.stock_pieces,
+      pieces_per_box: r.pieces_per_box,
+      avg_daily_sales: Math.round(r.avgDaily * 100) / 100,
+      days_remaining: r.avgDaily > 0 ? Math.round(r.stock_pieces / r.avgDaily) : null,
+      suggested_reorder_pieces: Math.max(0, targetStock - r.stock_pieces),
+      classification,
+    };
+  });
 }
 
 export interface StockAlertRow {
