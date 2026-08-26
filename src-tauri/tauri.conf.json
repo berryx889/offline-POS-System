@@ -42,6 +42,15 @@
     }
   },
   "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/berryx889/offline-POS-System/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    },
     "sql": {
       "preload": ["sqlite:pos.db"]
     }

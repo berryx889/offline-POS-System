@@ -3,11 +3,13 @@
 // product vision this was requested from) is that a shop owner sees this and
 // trusts they're running professionally licensed software, not a one-off app.
 
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSettings } from "@/db/queries/settings";
 import { mainBranch } from "@/db/queries/branches";
 import { Icon } from "@/components/Icon";
 import { APP_VERSION } from "@/version";
+import { checkForUpdate, type AvailableUpdate } from "@/native/updater";
 
 /** Show only the last group in full; the rest as bullets, e.g. •••• •••• 4F2A. */
 function maskLicenseKey(key: string): string {
@@ -19,6 +21,35 @@ function maskLicenseKey(key: string): string {
 export function AboutSection() {
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: getSettings });
   const { data: branch } = useQuery({ queryKey: ["main-branch"], queryFn: mainBranch });
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  const [updateStatus, setUpdateStatus] = useState("Checking for updates…");
+  const [installing, setInstalling] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    checkForUpdate()
+      .then((available) => {
+        if (!mounted) return;
+        setUpdate(available);
+        setUpdateStatus(available ? `Version ${available.version} is ready.` : "You are up to date.");
+      })
+      .catch(() => {
+        if (mounted) setUpdateStatus("Update check unavailable. The POS is still offline-ready.");
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  async function install() {
+    if (!update) return;
+    setInstalling(true);
+    setUpdateStatus("Downloading update…");
+    try {
+      await update.install();
+    } catch {
+      setInstalling(false);
+      setUpdateStatus("Update could not be installed. Try again later.");
+    }
+  }
 
   const year = new Date().getFullYear();
 
@@ -42,6 +73,19 @@ export function AboutSection() {
         <Item label="Branch">{branch?.name ?? "—"}</Item>
         <Item label="Support">{settings?.support_phone || "—"}</Item>
       </dl>
+
+      <div className="flex items-center justify-between border-t border-ink/8 px-5 py-3 text-sm">
+        <span className="text-ink/50">{updateStatus}</span>
+        {update && (
+          <button
+            onClick={() => void install()}
+            disabled={installing}
+            className="h-10 rounded-lg bg-ledger px-4 text-sm font-semibold text-tape hover:bg-ledger-deep disabled:opacity-40"
+          >
+            {installing ? "Installing…" : "Install update"}
+          </button>
+        )}
+      </div>
 
       <p className="border-t border-ink/8 px-5 py-3 text-xs text-ink/40">
         © {year} {settings?.vendor_name || "September Incorporation"}. All Rights Reserved.
