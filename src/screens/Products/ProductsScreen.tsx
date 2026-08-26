@@ -44,6 +44,7 @@ function withFamilyHeaders(products: Product[]): (Product | { header: string; fi
 }
 
 export function ProductsScreen() {
+  const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
