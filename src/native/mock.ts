@@ -100,4 +100,10 @@ export const mockAdapter: NativeAdapter = {
     database.run("PRAGMA foreign_keys = ON;");
     persist(database);
   },
+  async readBackupFile() {
+    throw new Error("File restore is only available in the installed app.");
+  },
+  async writeBackupFile() {
+    throw new Error("File backup is only available in the installed app.");
+  },
 };

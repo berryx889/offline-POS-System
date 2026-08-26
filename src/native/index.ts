@@ -78,6 +78,14 @@ export const native: NativeAdapter = {
     cached ??= await resolveAdapter();
     return cached.importDatabase(bytes);
   },
+  async readBackupFile(path) {
+    cached ??= await resolveAdapter();
+    return cached.readBackupFile(path);
+  },
+  async writeBackupFile(path, bytes) {
+    cached ??= await resolveAdapter();
+    return cached.writeBackupFile(path, bytes);
+  },
 };
 
 export type { NativeAdapter } from "./types";

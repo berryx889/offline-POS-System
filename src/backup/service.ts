@@ -24,13 +24,12 @@ export async function backupNow(): Promise<string | null> {
 
   if (native.kind === "tauri") {
     const { save } = await import("@tauri-apps/plugin-dialog");
-    const { writeFile } = await import("@tauri-apps/plugin-fs");
     const path = await save({
       defaultPath: name,
       filters: [{ name: "CounterTop backup", extensions: ["ctbk"] }],
     });
     if (!path) return null;
-    await writeFile(path, bytes);
+    await native.writeBackupFile(path, bytes);
     return path;
   }
 

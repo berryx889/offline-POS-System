@@ -28,6 +28,8 @@ export interface NativeAdapter {
   exportDatabase(): Promise<Uint8Array>;
   /** Replace the database with these bytes (restore). Caller reloads after. */
   importDatabase(bytes: Uint8Array): Promise<void>;
+  readBackupFile(path: string): Promise<Uint8Array>;
+  writeBackupFile(path: string, bytes: Uint8Array): Promise<void>;
 
   /** 'tauri' in the installed app, 'mock' during `npm run dev` in a browser. */
   readonly kind: "tauri" | "mock";

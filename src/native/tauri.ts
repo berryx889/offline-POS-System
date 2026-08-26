@@ -3,8 +3,6 @@
 
 import Database from "@tauri-apps/plugin-sql";
 import { invoke } from "@tauri-apps/api/core";
-import { readFile, writeFile, remove } from "@tauri-apps/plugin-fs";
-import { appConfigDir, join } from "@tauri-apps/api/path";
 import type { ExecuteResult, NativeAdapter } from "./types";
 
 let dbPromise: Promise<Database> | null = null;
@@ -111,25 +109,17 @@ export const tauriAdapter: NativeAdapter = {
     return invoke<void>("open_cash_drawer", { printerName: printerName ?? null });
   },
 
-  // The plugin-sql database file lives in the app config dir as pos.db. The
-  // `countertop` identifier makes this %APPDATA%/countertop/pos.db.
   async exportDatabase() {
-    const dir = await appConfigDir();
-    const path = await join(dir, "pos.db");
-    return readFile(path);
+    await serialize(() => executeImpl("PRAGMA wal_checkpoint(TRUNCATE)", []));
+    return invoke<Uint8Array>("export_database");
   },
   async importDatabase(bytes) {
-    const dir = await appConfigDir();
-    const path = await join(dir, "pos.db");
-    await writeFile(path, bytes);
-    // Drop WAL sidecars so the restored main file is authoritative on reopen.
-    for (const side of ["pos.db-wal", "pos.db-shm"]) {
-      try {
-        await remove(await join(dir, side));
-      } catch {
-        /* sidecar may not exist */
-      }
-    }
-    // The caller relaunches the app so the sql plugin reopens the new file.
+    await invoke("import_database", { bytes: Array.from(bytes) });
+  },
+  readBackupFile(path) {
+    return invoke<Uint8Array>("read_backup_file", { path });
+  },
+  writeBackupFile(path, bytes) {
+    return invoke("write_backup_file", { path, bytes: Array.from(bytes) });
   },
 };

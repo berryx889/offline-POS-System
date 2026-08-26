@@ -6,6 +6,42 @@
 
 use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
+use tauri::Manager;
+
+fn database_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join("pos.db"))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_database(app: tauri::AppHandle) -> Result<Vec<u8>, String> {
+    std::fs::read(database_path(&app)?).map_err(|e| format!("Could not read database backup: {e}"))
+}
+
+#[tauri::command]
+fn import_database(app: tauri::AppHandle, bytes: Vec<u8>) -> Result<(), String> {
+    let path = database_path(&app)?;
+    std::fs::create_dir_all(path.parent().ok_or("Invalid database path")?)
+        .map_err(|e| format!("Could not prepare database directory: {e}"))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Could not write database backup: {e}"))?;
+    for suffix in ["-wal", "-shm"] {
+        let sidecar = path.with_file_name(format!("pos.db{suffix}"));
+        let _ = std::fs::remove_file(sidecar);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn read_backup_file(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(path).map_err(|e| format!("Could not read backup file: {e}"))
+}
+
+#[tauri::command]
+fn write_backup_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    std::fs::write(path, bytes).map_err(|e| format!("Could not write backup file: {e}"))
+}
 
 /// Hash a PIN with argon2id. Returns the encoded PHC string to store in `users.pin_hash`.
 #[tauri::command]
@@ -135,7 +171,11 @@ pub fn run() {
             hash_pin,
             verify_pin,
             print_receipt,
-            open_cash_drawer
+            open_cash_drawer,
+            export_database,
+            import_database,
+            read_backup_file,
+            write_backup_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running CounterTop POS");

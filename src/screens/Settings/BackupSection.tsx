@@ -26,9 +26,8 @@ export function BackupSection() {
   async function pickRestore() {
     if (native.kind === "tauri") {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const { readFile } = await import("@tauri-apps/plugin-fs");
       const path = await open({ filters: [{ name: "CounterTop backup", extensions: ["ctbk"] }] });
-      if (typeof path === "string") await runRestore(await readFile(path));
+      if (typeof path === "string") await runRestore(await native.readBackupFile(path));
     } else {
       fileRef.current?.click();
     }
