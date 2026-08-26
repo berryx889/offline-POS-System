@@ -20,6 +20,7 @@ import { ReportsScreen } from "@/screens/Reports/ReportsScreen";
 import { SettingsScreen } from "@/screens/Settings/SettingsScreen";
 import { TransfersScreen } from "@/screens/Transfers/TransfersScreen";
 import { FinancialsScreen } from "@/screens/Financials/FinancialsScreen";
+import { StockOverviewScreen } from "@/screens/Products/StockOverviewScreen";
 
 export function App() {
   const user = useSession((s) => s.user);
@@ -53,6 +54,7 @@ export function App() {
           <Route path="/sell" element={<SellScreen />} />
           <Route path="/reprints" element={<ReprintsScreen />} />
           {canViewAdminArea && <Route path="/products" element={<ProductsScreen />} />}
+          {canViewAdminArea && <Route path="/stock" element={<StockOverviewScreen />} />}
           {canViewAdminArea && <Route path="/customers" element={<CustomersScreen />} />}
           {canViewAdminArea && <Route path="/dashboard" element={<DashboardScreen />} />}
           {canViewAdminArea && <Route path="/end-of-day" element={<EndOfDayScreen />} />}

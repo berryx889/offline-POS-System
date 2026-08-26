@@ -15,6 +15,7 @@ const ITEMS: Item[] = [
   { to: "/sell", label: "Sell", icon: "sell" },
   { to: "/reprints", label: "Reprints", icon: "reprints" },
   { to: "/products", label: "Products", icon: "products", requires: "view_admin_area" },
+  { to: "/stock", label: "Stock overview", icon: "products", requires: "view_admin_area" },
   { to: "/customers", label: "Customers", icon: "customers", requires: "view_admin_area" },
   { to: "/dashboard", label: "Dashboard", icon: "dashboard", requires: "view_admin_area" },
   { to: "/end-of-day", label: "End of day", icon: "endday", requires: "view_admin_area" },
