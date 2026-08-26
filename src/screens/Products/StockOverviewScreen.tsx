@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { currentStock, listRestocks, restockMovements, stockMovementHistory, stockOverview } from "@/db/queries/restocks";
 import { formatGHS } from "@/money";
 import { cn } from "@/lib/cn";
+import { exportStockHistory } from "@/exporter/stockHistory";
 
 type Tab = "overview" | "stock" | "restocks" | "movement" | "history";
 
@@ -11,6 +12,8 @@ export function StockOverviewScreen() {
   const [selectedRestock, setSelectedRestock] = useState<number | null>(null);
   const [movementType, setMovementType] = useState("all");
   const [movementSearch, setMovementSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const overview = useQuery({ queryKey: ["stock-overview"], queryFn: stockOverview });
   const stock = useQuery({ queryKey: ["current-stock"], queryFn: currentStock });
   const restocks = useQuery({ queryKey: ["restocks"], queryFn: () => listRestocks(200) });
@@ -29,13 +32,16 @@ export function StockOverviewScreen() {
   return (
     <div className="h-full overflow-auto p-6">
       <h1 className="font-sans text-xl font-semibold text-ink">Stock overview</h1>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <button onClick={() => overview.data && exportStockHistory(overview.data, stock.data ?? [], restocks.data ?? [], movement.data ?? [])} disabled={!overview.data} className="h-10 rounded-lg border border-ledger px-4 text-sm font-semibold text-ledger disabled:opacity-40">Export stock history</button>
+      </div>
       <div className="mt-4 flex flex-wrap gap-1 border-b border-ink/8">
         {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={cn("px-4 py-3 text-sm font-medium", tab === item.id ? "border-b-2 border-ledger text-ledger" : "text-ink/50")}>{item.label}</button>)}
       </div>
       {tab === "overview" && <Overview data={data} />}
       {tab === "stock" && <StockTable rows={stock.data ?? []} />}
       {(tab === "restocks" || tab === "history") && <RestockTable rows={restocks.data ?? []} onSelect={setSelectedRestock} />}
-      {tab === "movement" && <MovementTable rows={movement.data ?? []} type={movementType} search={movementSearch} onTypeChange={setMovementType} onSearchChange={setMovementSearch} />}
+      {tab === "movement" && <MovementTable rows={movement.data ?? []} type={movementType} search={movementSearch} fromDate={fromDate} toDate={toDate} onTypeChange={setMovementType} onSearchChange={setMovementSearch} onFromDateChange={setFromDate} onToDateChange={setToDate} />}
       {selectedRestock != null && <RestockDetail restock={restocks.data?.find((r) => r.id === selectedRestock)} rows={restockDetail.data ?? []} onClose={() => setSelectedRestock(null)} />}
     </div>
   );
@@ -48,7 +54,8 @@ function Overview({ data }: { data: ReturnType<typeof stockOverview> extends Pro
     ["Units sold", `${data.units_sold} units`], ["Sales revenue", formatGHS(data.revenue_pesewas)],
     ["Gross profit", formatGHS(data.gross_profit_pesewas)], ["Products", String(data.product_count)],
   ] : [];
-  return <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">{cards.map(([label, value]) => <div key={label} className="rounded-xl border border-ink/8 bg-tape p-4 shadow-card"><p className="text-xs text-ink/50">{label}</p><p className="mt-2 font-mono text-lg font-semibold tabular-nums text-ink">{value}</p></div>)}</div>;
+  const max = Math.max(data?.total_added ?? 0, data?.units_sold ?? 0, data?.remaining ?? 0, 1);
+  return <><div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">{cards.map(([label, value]) => <div key={label} className="rounded-xl border border-ink/8 bg-tape p-4 shadow-card"><p className="text-xs text-ink/50">{label}</p><p className="mt-2 font-mono text-lg font-semibold tabular-nums text-ink">{value}</p></div>)}</div><div className="mt-5 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card"><p className="text-sm font-semibold text-ink">Stock flow</p><div className="mt-4 flex h-36 items-end gap-6 border-b border-ink/10 px-4">{[["Added", data?.total_added ?? 0, "bg-ledger"], ["Sold", data?.units_sold ?? 0, "bg-stamp"], ["Remaining", data?.remaining ?? 0, "bg-carbon"]].map(([label, value, color]) => <div key={String(label)} className="flex flex-1 flex-col items-center gap-2"><span className="text-xs tabular-nums text-ink/50">{value}</span><div className={cn("w-full max-w-20 rounded-t-lg", String(color))} style={{ height: `${Math.max(8, Number(value) / max * 100)}px` }} /><span className="text-xs text-ink/60">{label}</span></div>)}</div></div></>;
 }
 
 function StockTable({ rows }: { rows: Awaited<ReturnType<typeof currentStock>> }) {
@@ -59,9 +66,9 @@ function RestockTable({ rows, onSelect }: { rows: Awaited<ReturnType<typeof list
   return <Table onRowClick={onSelect ? (row) => onSelect(rows[row].id) : undefined} headers={["Restock", "Date", "Product", "Initial", "Sold", "Remaining", "Cost", "Revenue", "Value left", "Created by"]} rows={rows.map((r) => [r.restock_no, new Date(r.restock_date).toLocaleDateString("en-GB"), r.product_name, r.quantity_added, r.units_sold, r.remaining_quantity, formatGHS(r.total_cost_pesewas), formatGHS(r.revenue_pesewas), formatGHS(r.remaining_value_pesewas), r.created_by_name])} />;
 }
 
-function MovementTable({ rows, type, search, onTypeChange, onSearchChange }: { rows: Awaited<ReturnType<typeof stockMovementHistory>>; type: string; search: string; onTypeChange: (value: string) => void; onSearchChange: (value: string) => void }) {
-  const filtered = rows.filter((r) => (type === "all" || r.action === type) && (!search || `${r.product_name} ${r.category_name ?? ""} ${r.user_name}`.toLowerCase().includes(search.toLowerCase())));
-  return <><div className="mt-5 flex flex-wrap gap-3"><input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search product, category, or user" className="h-10 min-w-[260px] flex-1 rounded-lg border border-ink/15 bg-tape px-3 text-sm" /><select value={type} onChange={(e) => onTypeChange(e.target.value)} className="h-10 rounded-lg border border-ink/15 bg-tape px-3 text-sm"><option value="all">All transaction types</option><option>Stock added</option><option>Restock</option><option>sale</option><option>return</option><option>adjustment</option></select></div><Table headers={["Date", "Product", "Category", "Action", "Quantity", "Value", "User"]} rows={filtered.map((r) => [new Date(r.created_at).toLocaleString("en-GB"), r.product_name, r.category_name ?? "—", r.action, r.quantity > 0 ? `+${r.quantity}` : r.quantity, formatGHS(r.value_pesewas), r.user_name])} /></>;
+function MovementTable({ rows, type, search, fromDate, toDate, onTypeChange, onSearchChange, onFromDateChange, onToDateChange }: { rows: Awaited<ReturnType<typeof stockMovementHistory>>; type: string; search: string; fromDate: string; toDate: string; onTypeChange: (value: string) => void; onSearchChange: (value: string) => void; onFromDateChange: (value: string) => void; onToDateChange: (value: string) => void }) {
+  const filtered = rows.filter((r) => { const date = r.created_at.slice(0, 10); return (type === "all" || r.action === type) && (!search || `${r.product_name} ${r.category_name ?? ""} ${r.user_name}`.toLowerCase().includes(search.toLowerCase())) && (!fromDate || date >= fromDate) && (!toDate || date <= toDate); });
+  return <><div className="mt-5 flex flex-wrap gap-3"><input type="date" value={fromDate} onChange={(e) => onFromDateChange(e.target.value)} className="h-10 rounded-lg border border-ink/15 bg-tape px-3 text-sm" /><input type="date" value={toDate} onChange={(e) => onToDateChange(e.target.value)} className="h-10 rounded-lg border border-ink/15 bg-tape px-3 text-sm" /><input value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search product, category, or user" className="h-10 min-w-[260px] flex-1 rounded-lg border border-ink/15 bg-tape px-3 text-sm" /><select value={type} onChange={(e) => onTypeChange(e.target.value)} className="h-10 rounded-lg border border-ink/15 bg-tape px-3 text-sm"><option value="all">All transaction types</option><option>Stock added</option><option>Restock</option><option>sale</option><option>return</option><option>adjustment</option></select></div><Table headers={["Date", "Product", "Category", "Action", "Quantity", "Value", "User"]} rows={filtered.map((r) => [new Date(r.created_at).toLocaleString("en-GB"), r.product_name, r.category_name ?? "—", r.action, r.quantity > 0 ? `+${r.quantity}` : r.quantity, formatGHS(r.value_pesewas), r.user_name])} /></>;
 }
 
 function RestockDetail({ restock, rows, onClose }: { restock: Awaited<ReturnType<typeof listRestocks>>[number] | undefined; rows: Awaited<ReturnType<typeof restockMovements>>; onClose: () => void }) {
