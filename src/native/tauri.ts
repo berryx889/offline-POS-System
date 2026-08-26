@@ -10,7 +10,7 @@ import type { ExecuteResult, NativeAdapter } from "./types";
 let dbPromise: Promise<Database> | null = null;
 
 function db(): Promise<Database> {
-  // Single file at %APPDATA%/countertop/pos.db (the plugin resolves the app dir).
+  // Single file at %APPDATA%/countertop/pos.db (the identifier resolves the app dir).
   if (!dbPromise) {
     dbPromise = Database.load("sqlite:pos.db").then(async (conn) => {
       // Defense in depth: tauri-plugin-sql pools several SQLite connections,
@@ -111,9 +111,8 @@ export const tauriAdapter: NativeAdapter = {
     return invoke<void>("open_cash_drawer", { printerName: printerName ?? null });
   },
 
-  // The plugin-sql database file lives in the app config dir as pos.db. NOTE:
-  // confirm this path on the Windows build; if the plugin resolves elsewhere,
-  // this is the one string to adjust.
+  // The plugin-sql database file lives in the app config dir as pos.db. The
+  // `countertop` identifier makes this %APPDATA%/countertop/pos.db.
   async exportDatabase() {
     const dir = await appConfigDir();
     const path = await join(dir, "pos.db");

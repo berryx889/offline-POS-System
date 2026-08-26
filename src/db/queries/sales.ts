@@ -1,3 +1,4 @@
+import { allocateSale } from "./restocks";
 // The sale transaction — the app's most important write (pos-prd.md §4, §5, §7).
 // A sale commits as ONE transaction: the sale row + line items + stock decrements +
 // stock movements. A power cut leaves the DB with either a whole sale or none.
@@ -307,13 +308,19 @@ export async function commitSale(input: CommitSaleInput): Promise<CommittedSale>
 
     for (const l of lines) {
       const pieces = linePieces(l);
-      await native.execute(
+      const itemResult = await native.execute(
         `INSERT INTO sale_items
           (sale_id, product_id, product_name, unit, qty, unit_price_pesewas,
-           line_total_pesewas, pieces_deducted)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [saleId, l.productId, l.name, l.unit, l.qty, unitPrice(l), lineTotal(l), pieces]
+           line_total_pesewas, pieces_deducted, cost_price_pesewas, profit_pesewas)
+         SELECT ?, p.id, ?, ?, ?, ?, ?, ?, COALESCE(p.cost_price_pesewas, 0), ? - COALESCE(p.cost_price_pesewas, 0) * ?
+           FROM products p WHERE p.id = ?`,
+        [saleId, l.name, l.unit, l.qty, unitPrice(l), lineTotal(l), pieces,
+          lineTotal(l), pieces, l.productId]
       );
+      const allocation = await allocateSale(saleId, itemResult.lastInsertId!, l.productId, pieces, lineTotal(l));
+      await native.execute("UPDATE sale_items SET cost_price_pesewas = ?, profit_pesewas = ? WHERE id = ?", [
+        allocation.costPesewas, allocation.profitPesewas, itemResult.lastInsertId,
+      ]);
       await applyStockMovement({
         productId: l.productId,
         changePieces: -pieces,

@@ -101,7 +101,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
   qty                 INTEGER NOT NULL,
   unit_price_pesewas  INTEGER NOT NULL,                 -- snapshot at sale time
   line_total_pesewas  INTEGER NOT NULL,
-  pieces_deducted     INTEGER NOT NULL                  -- qty × pieces-per-unit
+  pieces_deducted    INTEGER NOT NULL,                 -- qty × pieces-per-unit
+  cost_price_pesewas INTEGER NOT NULL DEFAULT 0,
+  profit_pesewas     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -112,11 +114,42 @@ CREATE TABLE IF NOT EXISTS stock_movements (
                   ('sale', 'void', 'restock', 'adjustment', 'purchase', 'return',
                    'damaged', 'expired', 'transfer', 'opening')),
   reference_id  INTEGER,                                -- sale id when applicable
+  restock_id    INTEGER REFERENCES restocks(id),        -- source batch for stock in
   note          TEXT,                                   -- free-text reason detail (v3)
   prev_pieces   INTEGER,                                -- stock before (v3; null on old rows)
   new_pieces    INTEGER,                                -- stock after  (v3; null on old rows)
   user_id       INTEGER NOT NULL REFERENCES users(id),
   created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS restocks (
+  id             INTEGER PRIMARY KEY,
+  restock_no     TEXT UNIQUE NOT NULL,
+  restock_date   TEXT NOT NULL,
+  created_by     INTEGER NOT NULL REFERENCES users(id),
+  created_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS restock_items (
+  id             INTEGER PRIMARY KEY,
+  restock_id     INTEGER NOT NULL REFERENCES restocks(id),
+  product_id     INTEGER NOT NULL REFERENCES products(id),
+  quantity_added INTEGER NOT NULL,
+  cost_price_pesewas INTEGER NOT NULL,
+  total_cost_pesewas INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sale_restock_allocations (
+  id             INTEGER PRIMARY KEY,
+  sale_id        INTEGER NOT NULL REFERENCES sales(id),
+  sale_item_id   INTEGER NOT NULL REFERENCES sale_items(id),
+  restock_id     INTEGER NOT NULL REFERENCES restocks(id),
+  product_id     INTEGER NOT NULL REFERENCES products(id),
+  quantity       INTEGER NOT NULL,
+  unit_cost_pesewas INTEGER NOT NULL,
+  cost_pesewas   INTEGER NOT NULL,
+  revenue_pesewas INTEGER NOT NULL,
+  profit_pesewas INTEGER NOT NULL
 );
 
 -- Parked carts the cashier can resume (v3 hold/resume).

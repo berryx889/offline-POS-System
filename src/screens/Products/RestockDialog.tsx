@@ -12,6 +12,7 @@ import { can } from "@/auth/permissions";
 import { formatStock, piecesForUnit } from "@/stock";
 import { emit } from "@/lib/events";
 import { cn } from "@/lib/cn";
+import { createRestock } from "@/db/queries/restocks";
 
 type ManualReason = Exclude<MovementReason, "sale" | "void" | "opening">;
 
@@ -56,11 +57,16 @@ export function RestockDialog({ product, onClose }: { product: Product; onClose:
     if (resulting < 0) return setError("That would leave negative stock.");
     setBusy(true);
     try {
-      await recordStockChange(product.id, change, reason, userId, note.trim() || undefined);
+      if (reason === "restock" || reason === "purchase") {
+        await createRestock(product.id, change, product.cost_price_pesewas ?? 0, userId, note.trim() || undefined);
+      } else {
+        await recordStockChange(product.id, change, reason, userId, note.trim() || undefined);
+      }
       queryClient.invalidateQueries({ queryKey: ["products-manage"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["top-products"] });
       queryClient.invalidateQueries({ queryKey: ["movements", product.id] });
+      queryClient.invalidateQueries({ queryKey: ["restocks"] });
       emit("stock:changed");
       onClose();
     } catch (e) {

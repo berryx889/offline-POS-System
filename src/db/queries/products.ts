@@ -408,12 +408,13 @@ export async function productSalesCount(id: number): Promise<number> {
 /** Deactivate a product (kept for history). Deactivated products can't be scanned
  *  or searched on the sales screen. */
 export async function setProductActive(id: number, active: boolean, userId: number): Promise<void> {
+  const [product] = await native.select<{ name: string }>("SELECT name FROM products WHERE id = ?", [id]);
   await native.execute("UPDATE products SET active = ?, updated_at = ? WHERE id = ?", [
     active ? 1 : 0,
     new Date().toISOString(),
     id,
   ]);
-  await logAudit(userId, active ? "product_activate" : "product_deactivate", { product_id: id });
+  await logAudit(userId, active ? "product_activate" : "product_deactivate", { product_id: id, name: product?.name });
 }
 
 /** Hard delete — only allowed for products with zero sales (a mistake fix). */
@@ -421,6 +422,7 @@ export async function deleteProduct(id: number, userId: number): Promise<void> {
   if ((await productSalesCount(id)) > 0) {
     throw new Error("This product has sales and can't be deleted. Deactivate it instead.");
   }
+  const [product] = await native.select<{ name: string }>("SELECT name FROM products WHERE id = ?", [id]);
   await native.execute("BEGIN IMMEDIATE");
   try {
     await native.execute("DELETE FROM stock_movements WHERE product_id = ?", [id]);
@@ -432,7 +434,7 @@ export async function deleteProduct(id: number, userId: number): Promise<void> {
     await native.execute("ROLLBACK");
     throw e;
   }
-  await logAudit(userId, "product_delete", { product_id: id });
+  await logAudit(userId, "product_delete", { product_id: id, name: product?.name });
 }
 
 /** Record a stock movement (restock, purchase, damage, count adjustment...) —

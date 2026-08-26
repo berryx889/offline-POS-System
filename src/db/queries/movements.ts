@@ -23,6 +23,7 @@ export interface MovementInput {
   reason: MovementReason;
   userId: number;
   referenceId?: number | null;
+  restockId?: number | null;
   note?: string | null;
   /** Shared timestamp when the caller writes several rows in one transaction. */
   now?: string;
@@ -74,14 +75,15 @@ export async function applyStockMovement(input: MovementInput): Promise<void> {
   );
   await native.execute(
     `INSERT INTO stock_movements
-      (product_id, change_pieces, reason, reference_id, note, prev_pieces, new_pieces,
+      (product_id, change_pieces, reason, reference_id, restock_id, note, prev_pieces, new_pieces,
        user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.productId,
       input.changePieces,
       input.reason,
       input.referenceId ?? null,
+      input.restockId ?? null,
       input.note ?? null,
       prev,
       next,

@@ -7,7 +7,7 @@ import { seedIfEmpty } from "./seed";
 import { setupFts } from "./fts";
 import { autoSnapshotIfDue } from "@/backup/service";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 // Guard against concurrent callers (e.g. React StrictMode invoking the boot
 // effect twice) racing the seed and inserting duplicate rows. Everyone shares
@@ -85,6 +85,7 @@ async function runMigrate(): Promise<void> {
   await native.execute("CREATE INDEX IF NOT EXISTS idx_sales_branch ON sales(branch_id)");
   await native.execute("CREATE INDEX IF NOT EXISTS idx_users_branch ON users(branch_id)");
   await ensureMainBranchAndBackfill();
+  await ensureInventoryCycleColumns();
   await native.execute(
     "INSERT OR IGNORE INTO settings (key, value) VALUES ('vendor_name', 'September Incorporation'), ('support_phone', '024-18-96-012')"
   );
@@ -105,6 +106,18 @@ async function runMigrate(): Promise<void> {
 
   // Daily local snapshot (best-effort; never blocks startup).
   autoSnapshotIfDue().catch(() => {});
+}
+
+async function ensureInventoryCycleColumns(): Promise<void> {
+  if (await missingColumn("stock_movements", "restock_id")) {
+    await native.execute("ALTER TABLE stock_movements ADD COLUMN restock_id INTEGER REFERENCES restocks(id)");
+  }
+  if (await missingColumn("sale_items", "cost_price_pesewas")) {
+    await native.execute("ALTER TABLE sale_items ADD COLUMN cost_price_pesewas INTEGER NOT NULL DEFAULT 0");
+  }
+  if (await missingColumn("sale_items", "profit_pesewas")) {
+    await native.execute("ALTER TABLE sale_items ADD COLUMN profit_pesewas INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 /** True when `sales` predates v2 (no credit_pesewas column). */

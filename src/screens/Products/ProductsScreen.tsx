@@ -2,8 +2,8 @@
 // low-stock filters, add/edit drawer, deactivate-vs-delete. Variants sharing a
 // `family` render grouped under a family header with an "add variant" shortcut.
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   listProductsManage,
   listCategories,
@@ -17,6 +17,10 @@ import { LabelDialog } from "./LabelDialog";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
+import { listRestocks } from "@/db/queries/restocks";
+import { formatGHS } from "@/money";
+import { exportStockSnapshot, importStockSnapshot } from "@/exporter/stockTransfer";
+import { useSession } from "@/store/sessionStore";
 
 type DrawerState =
   | { mode: "new"; initial?: Partial<ProductInput> }
@@ -48,6 +52,10 @@ export function ProductsScreen() {
   const [restockTarget, setRestockTarget] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
   const [labeling, setLabeling] = useState(false);
+  const stockFileRef = useRef<HTMLInputElement>(null);
+  const userId = useSession((s) => s.user?.id) ?? 0;
+  const [stockStatus, setStockStatus] = useState<string | null>(null);
+  const [stockError, setStockError] = useState<string | null>(null);
 
   const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
   const { data: products = [], isLoading } = useQuery({
@@ -60,6 +68,26 @@ export function ProductsScreen() {
         includeInactive,
       }),
   });
+  const { data: restocks = [] } = useQuery({
+    queryKey: ["restocks"],
+    queryFn: () => listRestocks(100),
+  });
+
+  async function exportStock() {
+    setStockError(null);
+    try { setStockStatus(`Exported to ${await exportStockSnapshot() ?? "no file"}.`); }
+    catch (e) { setStockError(String(e instanceof Error ? e.message : e)); }
+  }
+
+  async function importStock(file: File) {
+    setStockError(null);
+    try {
+      const result = await importStockSnapshot(new Uint8Array(await file.arrayBuffer()), userId);
+      setStockStatus(`Imported stock: ${result.updated} updated, ${result.created} created.`);
+      queryClient.invalidateQueries({ queryKey: ["products-manage"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    } catch (e) { setStockError(String(e instanceof Error ? e.message : e)); }
+  }
 
   return (
     <div className="flex h-full flex-col p-6">
@@ -72,6 +100,15 @@ export function ProductsScreen() {
           >
             Print labels
           </button>
+          <button onClick={exportStock} className="h-11 rounded-xl border border-ledger px-4 font-medium text-ledger hover:bg-ledger/5">
+            Export stock
+          </button>
+          <button onClick={() => stockFileRef.current?.click()} className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper">
+            Import stock
+          </button>
+          <input ref={stockFileRef} type="file" accept=".ctstock,application/json" className="hidden" onChange={(e) => {
+            const file = e.target.files?.[0]; if (file) void importStock(file); e.target.value = "";
+          }} />
           <button
             onClick={() => setImporting(true)}
             className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
@@ -86,6 +123,7 @@ export function ProductsScreen() {
           </button>
         </div>
       </div>
+      {(stockStatus || stockError) && <p className={cn("mt-2 text-sm", stockError ? "text-stamp" : "text-ledger")}>{stockError ?? stockStatus}</p>}
 
       {/* Toolbar */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -224,6 +262,47 @@ export function ProductsScreen() {
           </tbody>
         </table>
       </div>
+
+      <section className="mt-5 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="font-sans text-lg font-semibold text-ink">Restock history</h2>
+            <p className="text-sm text-ink/50">Original quantities stay fixed; sales reduce each batch's balance.</p>
+          </div>
+        </div>
+        {restocks.length === 0 ? (
+          <p className="py-4 text-sm text-ink/40">No restock cycles recorded yet.</p>
+        ) : (
+          <div className="overflow-auto">
+            <table className="w-full min-w-[760px] text-left text-sm tabular-nums">
+              <thead className="border-b border-ink/8 text-xs uppercase tracking-wide text-ink/50">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Restock</th>
+                  <th className="py-2 pr-3 font-medium">Product</th>
+                  <th className="py-2 pr-3 text-right font-medium">Initial</th>
+                  <th className="py-2 pr-3 text-right font-medium">Sold</th>
+                  <th className="py-2 pr-3 text-right font-medium">Remaining</th>
+                  <th className="py-2 pr-3 text-right font-medium">Revenue</th>
+                  <th className="py-2 text-right font-medium">Value left</th>
+                </tr>
+              </thead>
+              <tbody>
+                {restocks.map((restock) => (
+                  <tr key={restock.id} className="border-b border-ink/5 last:border-0">
+                    <td className="py-2 pr-3 font-semibold text-ledger">{restock.restock_no}</td>
+                    <td className="py-2 pr-3 text-ink">{restock.product_name}</td>
+                    <td className="py-2 pr-3 text-right">{restock.quantity_added}</td>
+                    <td className="py-2 pr-3 text-right">{restock.units_sold}</td>
+                    <td className="py-2 pr-3 text-right font-semibold">{restock.remaining_quantity}</td>
+                    <td className="py-2 pr-3 text-right">{formatGHS(restock.revenue_pesewas)}</td>
+                    <td className="py-2 text-right">{formatGHS(restock.remaining_value_pesewas)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {drawer && (
         <ProductDrawer
