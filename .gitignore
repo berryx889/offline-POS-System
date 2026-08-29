@@ -5,9 +5,9 @@ dist/
 # rust / tauri
 src-tauri/target/
 src-tauri/gen/
-# placeholder-only until HANDOFF.md §2.1's `npm run tauri icon <real logo>` runs —
-# never commit these, they're a plain green square, not the app's branding
-src-tauri/icons/
+# Tauri bundle icons are tracked because clean CI runners need them to compile.
+# Replace them in place with `npm run tauri icon <real logo>` when final branding
+# is available.
 # env
 .env
 # os
