@@ -25,6 +25,8 @@ export interface Product {
   promo_price_pesewas: number | null;
   bulk_price_pesewas: number | null;
   bulk_min_qty: number | null;
+  deal_qty: number | null;
+  deal_price_pesewas: number | null;
   cost_price_pesewas: number | null;
   stock_pieces: number;
   low_stock_threshold: number;
@@ -41,7 +43,8 @@ export const SELECT_PRODUCT = `
   SELECT p.id, p.name, p.barcode, p.sku, p.family, p.brand, p.supplier, p.description,
          p.image, p.category_id, c.name AS category_name, p.pieces_per_box,
          p.retail_price_pesewas, p.wholesale_price_pesewas, p.promo_price_pesewas,
-         p.bulk_price_pesewas, p.bulk_min_qty, p.cost_price_pesewas,
+         p.bulk_price_pesewas, p.bulk_min_qty, p.deal_qty, p.deal_price_pesewas,
+         p.cost_price_pesewas,
          p.stock_pieces, p.low_stock_threshold, p.expiry_date, p.batch_number, p.active,
          p.branch_id
     FROM products p
@@ -239,6 +242,8 @@ export interface ProductInput {
   promo_price_pesewas: number | null;
   bulk_price_pesewas: number | null;
   bulk_min_qty: number | null;
+  deal_qty: number | null;
+  deal_price_pesewas: number | null;
   cost_price_pesewas: number | null;
   low_stock_threshold: number;
   expiry_date: string | null;
@@ -260,9 +265,10 @@ export async function createProduct(
       `INSERT INTO products
         (name, barcode, sku, family, brand, supplier, description, image, category_id,
          pieces_per_box, retail_price_pesewas, wholesale_price_pesewas, promo_price_pesewas,
-         bulk_price_pesewas, bulk_min_qty, cost_price_pesewas, stock_pieces,
+         bulk_price_pesewas, bulk_min_qty, deal_qty, deal_price_pesewas,
+         cost_price_pesewas, stock_pieces,
          low_stock_threshold, expiry_date, batch_number, active, branch_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       [
         input.name,
         input.barcode,
@@ -279,6 +285,8 @@ export async function createProduct(
         input.promo_price_pesewas,
         input.bulk_price_pesewas,
         input.bulk_min_qty,
+        input.deal_qty,
+        input.deal_price_pesewas,
         input.cost_price_pesewas,
         openingStockPieces,
         input.low_stock_threshold,
@@ -324,7 +332,8 @@ export async function updateProduct(
        name = ?, barcode = ?, sku = ?, family = ?, brand = ?, supplier = ?,
        description = ?, image = ?, category_id = ?, pieces_per_box = ?,
        retail_price_pesewas = ?, wholesale_price_pesewas = ?, promo_price_pesewas = ?,
-       bulk_price_pesewas = ?, bulk_min_qty = ?, cost_price_pesewas = ?,
+       bulk_price_pesewas = ?, bulk_min_qty = ?, deal_qty = ?, deal_price_pesewas = ?,
+       cost_price_pesewas = ?,
        low_stock_threshold = ?, expiry_date = ?, batch_number = ?, updated_at = ?
      WHERE id = ?`,
     [
@@ -343,6 +352,8 @@ export async function updateProduct(
       input.promo_price_pesewas,
       input.bulk_price_pesewas,
       input.bulk_min_qty,
+      input.deal_qty,
+      input.deal_price_pesewas,
       input.cost_price_pesewas,
       input.low_stock_threshold,
       input.expiry_date,
@@ -362,6 +373,10 @@ export async function updateProduct(
       changes.promo = [before.promo_price_pesewas, input.promo_price_pesewas];
     if (before.bulk_price_pesewas !== input.bulk_price_pesewas)
       changes.bulk = [before.bulk_price_pesewas, input.bulk_price_pesewas];
+    if (before.deal_qty !== input.deal_qty)
+      changes.deal_quantity = [before.deal_qty, input.deal_qty];
+    if (before.deal_price_pesewas !== input.deal_price_pesewas)
+      changes.deal_price = [before.deal_price_pesewas, input.deal_price_pesewas];
     if (before.cost_price_pesewas !== input.cost_price_pesewas)
       changes.cost = [before.cost_price_pesewas, input.cost_price_pesewas];
     if (Object.keys(changes).length > 0) {

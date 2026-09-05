@@ -7,7 +7,7 @@ import { seedIfEmpty } from "./seed";
 import { setupFts } from "./fts";
 import { autoSnapshotIfDue } from "@/backup/service";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // Guard against concurrent callers (e.g. React StrictMode invoking the boot
 // effect twice) racing the seed and inserting duplicate rows. Everyone shares
@@ -54,6 +54,7 @@ async function runMigrate(): Promise<void> {
   // permanently missing a column the app now assumes exists. New TABLES come
   // from schema.sql above.
   await addProductV3Columns();
+  await addProductDealColumns();
   await native.execute("CREATE INDEX IF NOT EXISTS idx_products_family ON products(family)");
   if (await missingColumn("sales", "tax_pesewas")) {
     await native.execute("ALTER TABLE sales ADD COLUMN tax_pesewas INTEGER NOT NULL DEFAULT 0");
@@ -154,6 +155,16 @@ async function addProductV3Columns(): Promise<void> {
   );
   for (const [name, ddl] of adds) {
     if (!existing.has(name)) await native.execute(`ALTER TABLE products ADD COLUMN ${ddl}`);
+  }
+}
+
+/** v6: optional fixed-total quantity deals such as "3 for GH₵250". */
+async function addProductDealColumns(): Promise<void> {
+  if (await missingColumn("products", "deal_qty")) {
+    await native.execute("ALTER TABLE products ADD COLUMN deal_qty INTEGER");
+  }
+  if (await missingColumn("products", "deal_price_pesewas")) {
+    await native.execute("ALTER TABLE products ADD COLUMN deal_price_pesewas INTEGER");
   }
 }
 

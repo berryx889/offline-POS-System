@@ -105,6 +105,11 @@ export function ProductDrawer({
     product?.bulk_min_qty != null ? String(product.bulk_min_qty) : "12"
   );
   const [promo, setPromo] = useState(money(product?.promo_price_pesewas ?? null));
+  const [dealEnabled, setDealEnabled] = useState(
+    product?.deal_qty != null && product?.deal_price_pesewas != null
+  );
+  const [dealQty, setDealQty] = useState(String(product?.deal_qty ?? 3));
+  const [dealPrice, setDealPrice] = useState(money(product?.deal_price_pesewas ?? null));
   const [cost, setCost] = useState(money(product?.cost_price_pesewas ?? null));
   const [openingStock, setOpeningStock] = useState("0");
   const [threshold, setThreshold] = useState(String(product?.low_stock_threshold ?? 10));
@@ -113,6 +118,11 @@ export function ProductDrawer({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [salesCount, setSalesCount] = useState<number | null>(null);
+  const previewQty = Math.floor(Number(dealQty));
+  const previewRetail = toPesewas(retail);
+  const previewDeal = toPesewas(dealPrice);
+  const showDealPreview =
+    dealEnabled && previewQty >= 2 && previewRetail > 0 && previewDeal > 0;
 
   useEffect(() => {
     if (product) productSalesCount(product.id).then(setSalesCount);
@@ -143,6 +153,17 @@ export function ProductDrawer({
     if (retailP <= 0) return setError("Retail price is required.");
     const ppb = Math.max(1, parseInt(piecesPerBox, 10) || 1);
     const bulkP = bulk.trim() ? toPesewas(bulk) : null;
+    const dealQuantity = Math.floor(Number(dealQty));
+    const dealPricePesewas = dealPrice.trim() ? toPesewas(dealPrice) : 0;
+    if (dealEnabled && (!Number.isFinite(dealQuantity) || dealQuantity < 2)) {
+      return setError("Deal quantity must be at least 2.");
+    }
+    if (dealEnabled && dealPricePesewas <= 0) {
+      return setError("Deal price is required.");
+    }
+    if (dealEnabled && dealPricePesewas >= retailP * dealQuantity) {
+      return setError("Deal price must be less than the normal total.");
+    }
 
     setBusy(true);
     try {
@@ -165,6 +186,8 @@ export function ProductDrawer({
         promo_price_pesewas: promo.trim() ? toPesewas(promo) : null,
         bulk_price_pesewas: bulkP,
         bulk_min_qty: bulkP != null ? Math.max(2, parseInt(bulkMinQty, 10) || 12) : null,
+        deal_qty: dealEnabled ? dealQuantity : null,
+        deal_price_pesewas: dealEnabled ? dealPricePesewas : null,
         cost_price_pesewas: cost.trim() ? toPesewas(cost) : null,
         low_stock_threshold: Math.max(0, parseInt(threshold, 10) || 0),
         expiry_date: expiry.trim() || null,
@@ -367,6 +390,39 @@ export function ProductDrawer({
             <L label="Cost price / PC (GHS)">
               <In value={cost} onChange={setCost} placeholder="optional" disabled={priceFieldsLocked} />
             </L>
+          </div>
+
+          <div className="rounded-xl border border-ink/8 bg-tape p-3">
+            <label className="flex min-h-12 cursor-pointer items-center gap-3">
+              <input
+                type="checkbox"
+                checked={dealEnabled}
+                onChange={(e) => setDealEnabled(e.target.checked)}
+                disabled={priceFieldsLocked}
+                className="h-5 w-5 accent-ledger"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-ink">Quantity deal</span>
+                <span className="block text-xs text-ink/50">Optional offer such as 3 pieces for GH₵250</span>
+              </span>
+            </label>
+            {dealEnabled && (
+              <>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <L label="Number of pieces">
+                    <In value={dealQty} onChange={setDealQty} type="number" disabled={priceFieldsLocked} />
+                  </L>
+                  <L label="Deal price (GHS)">
+                    <In value={dealPrice} onChange={setDealPrice} placeholder="0.00" disabled={priceFieldsLocked} />
+                  </L>
+                </div>
+                {showDealPreview && (
+                  <p className="mt-2 rounded-lg bg-leaf px-3 py-2 text-xs text-ledger-deep">
+                    Normal GH₵{formatPesewas(previewRetail * previewQty)} · Customer pays GH₵{formatPesewas(previewDeal)} · Saves GH₵{formatPesewas(Math.max(0, previewRetail * previewQty - previewDeal))}
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           {isEdit && <UnitsEditor productId={product!.id} userId={userId} />}

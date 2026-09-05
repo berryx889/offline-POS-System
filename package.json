@@ -1,7 +1,7 @@
 {
   "name": "countertop-pos",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "CounterTop POS — fully offline desktop point-of-sale for wholesale & retail shops",
   "scripts": {

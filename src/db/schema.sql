@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS products (
   promo_price_pesewas      INTEGER,                     -- per piece; overrides retail while set
   bulk_price_pesewas       INTEGER,                     -- per-piece wholesale (bulk buys)
   bulk_min_qty             INTEGER,                     -- piece qty where bulk price kicks in
+  deal_qty                 INTEGER,                     -- optional multi-buy group size (e.g. 3)
+  deal_price_pesewas       INTEGER,                     -- fixed price for one complete deal group
   cost_price_pesewas       INTEGER,                     -- per piece, admin-only
   stock_pieces             INTEGER NOT NULL DEFAULT 0,  -- ALL stock tracked in pieces
   low_stock_threshold      INTEGER NOT NULL DEFAULT 10, -- reorder level

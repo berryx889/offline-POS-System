@@ -22,6 +22,8 @@ const HEADERS = [
   "promo_price",
   "bulk_price",
   "bulk_min_qty",
+  "deal_qty",
+  "deal_price",
   "cost_price",
   "opening_stock",
   "low_stock_threshold",
@@ -46,6 +48,8 @@ export function downloadTemplate(): void {
     promo_price: "",
     bulk_price: 5,
     bulk_min_qty: 12,
+    deal_qty: 3,
+    deal_price: 14,
     cost_price: 4.3,
     opening_stock: 100,
     low_stock_threshold: 20,
@@ -74,6 +78,8 @@ export interface ParsedRow {
   promoPesewas: number | null;
   bulkPesewas: number | null;
   bulkMinQty: number | null;
+  dealQty: number | null;
+  dealPricePesewas: number | null;
   costPesewas: number | null;
   openingStock: number;
   threshold: number;
@@ -138,6 +144,16 @@ export async function parseWorkbook(file: File): Promise<ParsedRow[]> {
     const bulk = String(bulkRaw ?? "").trim() ? num(bulkRaw) : NaN;
     const bulkMinRaw = row.bulk_min_qty;
     const bulkMinQty = isFinite(bulk) ? Math.max(2, Math.floor(num(bulkMinRaw) || 12)) : null;
+    const dealQtyRaw = row.deal_qty;
+    const dealPriceRaw = row.deal_price;
+    const hasDeal = String(dealQtyRaw ?? "").trim() !== "" || String(dealPriceRaw ?? "").trim() !== "";
+    const dealQty = hasDeal ? Math.floor(num(dealQtyRaw)) : null;
+    const dealPrice = hasDeal ? num(dealPriceRaw) : NaN;
+    if (hasDeal && (dealQty == null || !isFinite(dealQty) || dealQty < 2)) errors.push("Deal quantity must be at least 2");
+    if (hasDeal && (!isFinite(dealPrice) || dealPrice <= 0)) errors.push("Deal price must be a number > 0");
+    if (hasDeal && isFinite(retail) && dealQty != null && isFinite(dealPrice) && dealPrice >= retail * dealQty) {
+      errors.push("Deal price must be less than the normal total");
+    }
 
     const str = (v: unknown) => String(v ?? "").trim() || null;
 
@@ -157,6 +173,8 @@ export async function parseWorkbook(file: File): Promise<ParsedRow[]> {
       promoPesewas: isFinite(promo) ? toPesewas(promo) : null,
       bulkPesewas: isFinite(bulk) ? toPesewas(bulk) : null,
       bulkMinQty,
+      dealQty,
+      dealPricePesewas: isFinite(dealPrice) ? toPesewas(dealPrice) : null,
       costPesewas: isFinite(cost) ? toPesewas(cost) : null,
       openingStock: Math.max(0, Math.floor(num(row.opening_stock) || 0)),
       threshold: Math.max(0, Math.floor(num(row.low_stock_threshold) || 10)),
@@ -195,6 +213,8 @@ export async function commitRows(rows: ParsedRow[], userId: number): Promise<num
       promo_price_pesewas: r.promoPesewas,
       bulk_price_pesewas: r.bulkPesewas,
       bulk_min_qty: r.bulkMinQty,
+      deal_qty: r.dealQty,
+      deal_price_pesewas: r.dealPricePesewas,
       cost_price_pesewas: r.costPesewas,
       low_stock_threshold: r.threshold,
       expiry_date: r.expiryDate,

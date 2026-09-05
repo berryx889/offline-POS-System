@@ -4,7 +4,7 @@
 // an admin can override the unit price (pos-prd.md §6.1; cashiers need an admin PIN).
 
 import { useEffect, useState } from "react";
-import { unitPrice, lineTotal, availableUnits, pieceRate, useCart, type CartLine } from "@/store/cartStore";
+import { unitPrice, lineTotal, availableUnits, pieceRate, quantityDealApplied, useCart, type CartLine } from "@/store/cartStore";
 import { useSession } from "@/store/sessionStore";
 import { logAudit } from "@/db/queries/audit";
 import { MoneyText } from "@/components/MoneyText";
@@ -153,6 +153,11 @@ export function CartLineRow({ line }: { line: CartLine }) {
               )}
             >
               {pieceRate(line) === "wholesale" ? "WS" : "PROMO"}
+            </span>
+          )}
+          {!overridden && quantityDealApplied(line) && (
+            <span className="rounded bg-ledger/10 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ledger">
+              {line.dealQty} for <MoneyText pesewas={line.dealPricePesewas!} size="sm" />
             </span>
           )}
         </div>

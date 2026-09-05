@@ -25,6 +25,9 @@ on `main`, working tree clean.** Typecheck + lint pass.
   pricing (promo/auto-wholesale/customer-type), checkout hold-resume/tax/notes,
   full inventory movement types, receipt barcode, valuation/slow-mover/alert
   reports, idle-session lock, Excel import/export extended to match — see §3b.
+- ✅ v0.1.4: optional per-product quantity deals (for example 3 pieces for
+  GH₵250), applied automatically to complete groups while remaining disabled by
+  default for every existing product and store.
 - ✅ A UI refresh to a clean "SiMi Shop" grocery-dashboard look
 - ✅ A `/code-review high` pass over the v3 diff surfaced 10 findings; all 9
   worth fixing are **fixed and verified live against the DB** (`d032490`,

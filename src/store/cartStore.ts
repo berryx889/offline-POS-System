@@ -23,6 +23,9 @@ export interface CartLine {
   /** Per-piece wholesale price + the piece qty where it kicks in automatically. */
   bulkPesewas: number | null;
   bulkMinQty: number | null;
+  /** Optional multi-buy offer, e.g. 3 pieces for GH₵250. */
+  dealQty: number | null;
+  dealPricePesewas: number | null;
   /** Wholesale-pricing sale (customer type or cashier toggle): bulk price applies
    *  regardless of quantity. Carried per line so pricing stays a pure function. */
   wholesale: boolean;
@@ -68,7 +71,27 @@ export function unitPrice(line: CartLine): number {
 }
 
 export function lineTotal(line: CartLine): number {
-  return unitPrice(line) * line.qty;
+  const normalTotal = unitPrice(line) * line.qty;
+  if (
+    line.overridePesewas != null ||
+    line.unit !== "piece" ||
+    line.dealQty == null ||
+    line.dealQty < 2 ||
+    line.dealPricePesewas == null ||
+    line.dealPricePesewas <= 0
+  ) {
+    return normalTotal;
+  }
+  const groups = Math.floor(line.qty / line.dealQty);
+  if (groups === 0) return normalTotal;
+  const remainder = line.qty % line.dealQty;
+  const dealTotal = groups * line.dealPricePesewas + remainder * unitPrice(line);
+  // Never make a customer pay more merely because a deal is configured.
+  return Math.min(normalTotal, dealTotal);
+}
+
+export function quantityDealApplied(line: CartLine): boolean {
+  return lineTotal(line) < unitPrice(line) * line.qty;
 }
 
 /** Pieces this line deducts from stock. */
@@ -101,6 +124,8 @@ function toLine(p: Product, unit: Unit, wholesale: boolean): CartLine {
     promoPesewas: p.promo_price_pesewas,
     bulkPesewas: p.bulk_price_pesewas,
     bulkMinQty: p.bulk_min_qty,
+    dealQty: p.deal_qty,
+    dealPricePesewas: p.deal_price_pesewas,
     wholesale,
     extraUnits: [],
     unit: "piece",

@@ -18,6 +18,8 @@ interface StockProduct {
   promo_price_pesewas: number | null;
   bulk_price_pesewas: number | null;
   bulk_min_qty: number | null;
+  deal_qty: number | null;
+  deal_price_pesewas: number | null;
   cost_price_pesewas: number | null;
   stock_pieces: number;
   low_stock_threshold: number;
@@ -67,6 +69,7 @@ async function listProductsForTransfer(): Promise<StockProduct[]> {
     pieces_per_box: p.pieces_per_box, retail_price_pesewas: p.retail_price_pesewas,
     wholesale_price_pesewas: p.wholesale_price_pesewas, promo_price_pesewas: p.promo_price_pesewas,
     bulk_price_pesewas: p.bulk_price_pesewas, bulk_min_qty: p.bulk_min_qty,
+    deal_qty: p.deal_qty, deal_price_pesewas: p.deal_price_pesewas,
     cost_price_pesewas: p.cost_price_pesewas, stock_pieces: p.stock_pieces,
     low_stock_threshold: p.low_stock_threshold, expiry_date: p.expiry_date,
     batch_number: p.batch_number, active: p.active,
@@ -94,6 +97,7 @@ export async function importStockSnapshot(bytes: Uint8Array, userId: number): Pr
       pieces_per_box: item.pieces_per_box, retail_price_pesewas: item.retail_price_pesewas,
       wholesale_price_pesewas: item.wholesale_price_pesewas, promo_price_pesewas: item.promo_price_pesewas,
       bulk_price_pesewas: item.bulk_price_pesewas, bulk_min_qty: item.bulk_min_qty,
+      deal_qty: item.deal_qty ?? null, deal_price_pesewas: item.deal_price_pesewas ?? null,
       cost_price_pesewas: item.cost_price_pesewas, low_stock_threshold: item.low_stock_threshold,
       expiry_date: item.expiry_date, batch_number: item.batch_number,
     };
