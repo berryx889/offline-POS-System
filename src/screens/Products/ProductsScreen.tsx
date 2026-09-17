@@ -17,8 +17,7 @@ import { LabelDialog } from "./LabelDialog";
 import { MoneyText } from "@/components/MoneyText";
 import { formatStock } from "@/stock";
 import { cn } from "@/lib/cn";
-import { listRestocks } from "@/db/queries/restocks";
-import { formatGHS } from "@/money";
+import { Link } from "react-router-dom";
 import { exportStockSnapshot, importStockSnapshot } from "@/exporter/stockTransfer";
 import { useSession } from "@/store/sessionStore";
 
@@ -69,10 +68,6 @@ export function ProductsScreen() {
         includeInactive,
       }),
   });
-  const { data: restocks = [] } = useQuery({
-    queryKey: ["restocks"],
-    queryFn: () => listRestocks(100),
-  });
 
   async function exportStock() {
     setStockError(null);
@@ -91,10 +86,11 @@ export function ProductsScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col p-6">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <h1 className="font-sans text-xl font-semibold text-ink">Products</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/restock-history" className="flex min-h-12 items-center rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon">Restock history</Link>
           <button
             onClick={() => setLabeling(true)}
             className="h-11 rounded-xl border border-ink/15 bg-tape px-4 font-medium text-ink/70 hover:bg-paper focus:outline-none focus:ring-2 focus:ring-carbon"
@@ -127,7 +123,7 @@ export function ProductsScreen() {
       {(stockStatus || stockError) && <p className={cn("mt-2 text-sm", stockError ? "text-stamp" : "text-ledger")}>{stockError ?? stockStatus}</p>}
 
       {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -152,7 +148,7 @@ export function ProductsScreen() {
         </Chip>
       </div>
 
-      <div className="flex-1 overflow-auto rounded-2xl border border-ink/8 bg-tape shadow-card">
+      <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-ink/8 bg-tape shadow-card">
         <table className="w-full text-left text-sm tabular-nums">
           <thead className="sticky top-0 border-b border-ink/8 bg-paper/95 text-xs uppercase tracking-wide text-ink/50">
             <tr>
@@ -264,46 +260,6 @@ export function ProductsScreen() {
         </table>
       </div>
 
-      <section className="mt-5 rounded-2xl border border-ink/8 bg-tape p-5 shadow-card">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="font-sans text-lg font-semibold text-ink">Restock history</h2>
-            <p className="text-sm text-ink/50">Original quantities stay fixed; sales reduce each batch's balance.</p>
-          </div>
-        </div>
-        {restocks.length === 0 ? (
-          <p className="py-4 text-sm text-ink/40">No restock cycles recorded yet.</p>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full min-w-[760px] text-left text-sm tabular-nums">
-              <thead className="border-b border-ink/8 text-xs uppercase tracking-wide text-ink/50">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">Restock</th>
-                  <th className="py-2 pr-3 font-medium">Product</th>
-                  <th className="py-2 pr-3 text-right font-medium">Initial</th>
-                  <th className="py-2 pr-3 text-right font-medium">Sold</th>
-                  <th className="py-2 pr-3 text-right font-medium">Remaining</th>
-                  <th className="py-2 pr-3 text-right font-medium">Revenue</th>
-                  <th className="py-2 text-right font-medium">Value left</th>
-                </tr>
-              </thead>
-              <tbody>
-                {restocks.map((restock) => (
-                  <tr key={restock.id} className="border-b border-ink/5 last:border-0">
-                    <td className="py-2 pr-3 font-semibold text-ledger">{restock.restock_no}</td>
-                    <td className="py-2 pr-3 text-ink">{restock.product_name}</td>
-                    <td className="py-2 pr-3 text-right">{restock.quantity_added}</td>
-                    <td className="py-2 pr-3 text-right">{restock.units_sold}</td>
-                    <td className="py-2 pr-3 text-right font-semibold">{restock.remaining_quantity}</td>
-                    <td className="py-2 pr-3 text-right">{formatGHS(restock.revenue_pesewas)}</td>
-                    <td className="py-2 text-right">{formatGHS(restock.remaining_value_pesewas)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
       {drawer && (
         <ProductDrawer

@@ -15,6 +15,21 @@ and current state. The other docs each have one job:
 
 ## 1. Status: feature-complete, v3 built and hardened
 
+### Pending update: separate restock history (2026-09-17)
+
+Products now links to a separate `/restock-history` page, protected by the same
+admin-area permission. The latest 100 entries scroll independently. Products no
+longer loads or renders history; its toolbar wraps and its table keeps the
+remaining screen space. No database migration is needed.
+
+Verified in the local browser preview with 30 one-piece restocks on Quantity
+Deal Test: original product viewport collapsed to 2px; fixed viewport was 523px
+at the same window size. All 30 history entries remained accessible, and adding
+Restock Layout Test (GHS10, zero stock) succeeded afterward. These test records
+remain in the browser preview only. Typecheck, lint, and production build passed.
+This change is not yet published as a desktop update. The previously reported
+native checkout transaction issue remains unresolved and requires separate work.
+
 Everything in the PRD is built, plus the v1.5, v2, and v3 extras. **54 commits, all
 on `main`, working tree clean.** Typecheck + lint pass.
 

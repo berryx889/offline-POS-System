@@ -13,6 +13,7 @@ import { NavRail } from "@/components/NavRail";
 import { SellScreen } from "@/screens/Sell/SellScreen";
 import { ReprintsScreen } from "@/screens/Reprints/ReprintsScreen";
 import { ProductsScreen } from "@/screens/Products/ProductsScreen";
+import { RestockHistoryScreen } from "@/screens/Products/RestockHistoryScreen";
 import { CustomersScreen } from "@/screens/Customers/CustomersScreen";
 import { DashboardScreen } from "@/screens/Dashboard/DashboardScreen";
 import { EndOfDayScreen } from "@/screens/EndOfDay/EndOfDayScreen";
@@ -54,6 +55,7 @@ export function App() {
           <Route path="/sell" element={<SellScreen />} />
           <Route path="/reprints" element={<ReprintsScreen />} />
           {canViewAdminArea && <Route path="/products" element={<ProductsScreen />} />}
+          {canViewAdminArea && <Route path="/restock-history" element={<RestockHistoryScreen />} />}
           {canViewAdminArea && <Route path="/stock" element={<StockOverviewScreen />} />}
           {canViewAdminArea && <Route path="/customers" element={<CustomersScreen />} />}
           {canViewAdminArea && <Route path="/dashboard" element={<DashboardScreen />} />}
