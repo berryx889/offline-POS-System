@@ -47,7 +47,9 @@ jobs:
           releaseBody: |
             CounterTop POS v__VERSION__
 
-            This release adds optional per-product quantity deals, such as 3 pieces for GH₵250. Existing products remain unchanged until a deal is enabled.
+            Restock history now opens on its own page from Products. Long histories no longer collapse the product list, and the toolbar wraps on smaller screens.
+
+            This is a layout update with no database migration. Existing products, stock, sales and settings are retained. Back up your store and finish active sales before updating.
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc

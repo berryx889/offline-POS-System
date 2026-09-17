@@ -1,6 +1,6 @@
 [package]
 name = "countertop-pos"
-version = "0.1.4"
+version = "0.1.5"
 description = "CounterTop POS — offline desktop point-of-sale"
 authors = ["Berry September"]
 edition = "2021"
